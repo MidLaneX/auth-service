@@ -2,6 +2,7 @@ package com.midlane.project_management_tool_auth_service.service;
 
 import com.midlane.project_management_tool_auth_service.dto.AuthResponse;
 import com.midlane.project_management_tool_auth_service.dto.RegisterRequest;
+import com.midlane.project_management_tool_auth_service.dto.UserDTO;
 import com.midlane.project_management_tool_auth_service.model.User;
 import com.midlane.project_management_tool_auth_service.repository.UserRepository;
 import com.midlane.project_management_tool_auth_service.util.JwtUtil;
@@ -13,6 +14,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -48,6 +51,21 @@ public class UserService {
                 .token(token)
                 .userId(savedUser.getUserId())
                 .email(savedUser.getEmail())
+                .build();
+    }
+
+    public List<UserDTO> getAllUsers() {
+        return userRepository.findAll().stream()
+                .map(this::mapToUserDTO)
+                .collect(Collectors.toList());
+    }
+
+    private UserDTO mapToUserDTO(User user) {
+        return UserDTO.builder()
+                .userId(user.getUserId())
+                .email(user.getEmail())
+                .phone(user.getPhone())
+                .userCreated(user.getUserCreated())
                 .build();
     }
 }
