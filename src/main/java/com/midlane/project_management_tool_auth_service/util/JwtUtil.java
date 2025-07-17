@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
+import javax.crypto.SecretKey;
 import java.security.Key;
 import java.util.Date;
 import java.util.HashMap;
@@ -18,7 +19,7 @@ import java.util.function.Function;
 public class JwtUtil {
 
     @Value("${jwt.secret:defaultsecretkey}")
-    private String secretKey;
+    private String secretKeyString;
 
     @Value("${jwt.expiration:86400000}")
     private long jwtExpiration;
@@ -45,8 +46,7 @@ public class JwtUtil {
     }
 
     private Key getSigningKey() {
-        byte[] keyBytes = secretKey.getBytes();
-        return Keys.hmacShaKeyFor(keyBytes);
+        return Keys.secretKeyFor(SignatureAlgorithm.HS256);
     }
 
     private Boolean isTokenExpired(String token) {
