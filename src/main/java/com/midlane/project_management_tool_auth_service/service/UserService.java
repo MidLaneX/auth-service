@@ -1,6 +1,7 @@
 package com.midlane.project_management_tool_auth_service.service;
 
 import com.midlane.project_management_tool_auth_service.dto.AuthResponse;
+import com.midlane.project_management_tool_auth_service.dto.LoginRequest;
 import com.midlane.project_management_tool_auth_service.dto.RegisterRequest;
 import com.midlane.project_management_tool_auth_service.dto.UserDTO;
 import com.midlane.project_management_tool_auth_service.model.User;
@@ -8,7 +9,10 @@ import com.midlane.project_management_tool_auth_service.repository.UserRepositor
 import com.midlane.project_management_tool_auth_service.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -66,6 +70,41 @@ public class UserService {
                 .email(user.getEmail())
                 .phone(user.getPhone())
                 .userCreated(user.getUserCreated())
+                .build();
+    }
+
+    public AuthResponse loginUser(LoginRequest request) {
+        // Authenticate user
+        UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                request.getEmail(),
+                request.getPassword()
+        );
+
+        AuthenticationManager authenticationManager = new AuthenticationManager() {
+            @Override
+            public Authentication authenticate(Authentication authentication) throws AuthenticationException {
+                UserDetails userDetails = userDetailsService.loadUserByUsername(authentication.getName());
+                if (passwordEncoder.matches(authentication.getCredentials().toString(), userDetails.getPassword())) {
+                    return new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+                }
+                throw new BadCredentialsException("Invalid credentials");
+            }
+        };
+
+        authenticationManager.authenticate(authToken);
+
+        // Generate JWT token
+        UserDetails userDetails = userDetailsService.loadUserByUsername(request.getEmail());
+        String token = jwtUtil.generateToken(userDetails);
+
+        // Find User by email to get userId
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        return AuthResponse.builder()
+                .token(token)
+                .userId(user.getUserId())
+                .email(userDetails.getUsername())
                 .build();
     }
 }

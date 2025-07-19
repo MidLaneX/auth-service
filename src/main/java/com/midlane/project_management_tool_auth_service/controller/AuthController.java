@@ -1,6 +1,7 @@
 package com.midlane.project_management_tool_auth_service.controller;
 
 import com.midlane.project_management_tool_auth_service.dto.AuthResponse;
+import com.midlane.project_management_tool_auth_service.dto.LoginRequest;
 import com.midlane.project_management_tool_auth_service.dto.RegisterRequest;
 import com.midlane.project_management_tool_auth_service.dto.UserDTO;
 import com.midlane.project_management_tool_auth_service.service.UserService;
@@ -29,5 +30,10 @@ public class AuthController {
     @GetMapping("/users")
     public ResponseEntity<List<UserDTO>> getAllUsers() {
         return ResponseEntity.ok(userService.getAllUsers());
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<AuthResponse> login(@RequestBody LoginRequest request) {
+        return ResponseEntity.ok(userService.loginUser(request));
     }
 }

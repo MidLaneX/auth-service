@@ -1,5 +1,6 @@
 package com.midlane.project_management_tool_auth_service.config;
 
+import com.midlane.project_management_tool_auth_service.security.JwtAuthFilter;
 import com.midlane.project_management_tool_auth_service.service.CustomUserDetailsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -30,7 +31,7 @@ public class SecurityConfig {
         http
             .csrf(AbstractHttpConfigurer::disable)
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/register", "/api/auth/users").permitAll()
+                .requestMatchers("/api/auth/**").permitAll()
                 .anyRequest().authenticated()
             )
             .sessionManagement(session -> session
@@ -49,10 +50,9 @@ public class SecurityConfig {
 
     @Bean
     public AuthenticationProvider authenticationProvider() {
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
-        provider.setUserDetailsService(customUserDetailsService);
-        provider.setPasswordEncoder(passwordEncoder());
-        return provider;
+        return new DaoAuthenticationProvider(customUserDetailsService) {{
+            setPasswordEncoder(passwordEncoder());
+        }};
     }
 
     @Bean
