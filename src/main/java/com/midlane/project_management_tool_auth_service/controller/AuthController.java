@@ -4,9 +4,12 @@ import com.midlane.project_management_tool_auth_service.dto.AuthResponse;
 import com.midlane.project_management_tool_auth_service.dto.LoginRequest;
 import com.midlane.project_management_tool_auth_service.dto.RegisterRequest;
 import com.midlane.project_management_tool_auth_service.dto.UserDTO;
+import com.midlane.project_management_tool_auth_service.exception.ErrorResponse;
 import com.midlane.project_management_tool_auth_service.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -33,7 +36,15 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@RequestBody LoginRequest request) {
-        return ResponseEntity.ok(userService.loginUser(request));
+    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
+        try {
+            return ResponseEntity.ok(userService.loginUser(request));
+        } catch (BadCredentialsException ex) {
+            ErrorResponse error = new ErrorResponse("INVALID_CREDENTIALS", "Invalid email or password");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+        } catch (RuntimeException ex) {
+            ErrorResponse error = new ErrorResponse("LOGIN_ERROR", ex.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        }
     }
 }
