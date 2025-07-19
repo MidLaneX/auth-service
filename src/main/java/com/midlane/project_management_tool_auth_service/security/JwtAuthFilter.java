@@ -1,4 +1,4 @@
-package com.midlane.project_management_tool_auth_service.config;
+package com.midlane.project_management_tool_auth_service.security;
 
 import com.midlane.project_management_tool_auth_service.service.CustomUserDetailsService;
 import com.midlane.project_management_tool_auth_service.util.JwtUtil;
