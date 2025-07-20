@@ -1,14 +1,19 @@
 package com.midlane.project_management_tool_auth_service.service;
 
 import com.midlane.project_management_tool_auth_service.dto.AuthResponse;
+import com.midlane.project_management_tool_auth_service.dto.LoginRequest;
 import com.midlane.project_management_tool_auth_service.dto.RegisterRequest;
 import com.midlane.project_management_tool_auth_service.dto.UserDTO;
+import com.midlane.project_management_tool_auth_service.model.Role;
 import com.midlane.project_management_tool_auth_service.model.User;
 import com.midlane.project_management_tool_auth_service.repository.UserRepository;
 import com.midlane.project_management_tool_auth_service.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -37,6 +42,7 @@ public class UserService {
         user.setEmail(request.getEmail());
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
         user.setPhone(request.getPhone());
+        user.setRole(Role.ADMIN);
         user.setPasswordLastChanged(LocalDateTime.now());
         user.setUserCreated(LocalDateTime.now());
         user.setEmailLastChanged(LocalDateTime.now());
@@ -51,6 +57,7 @@ public class UserService {
                 .token(token)
                 .userId(savedUser.getUserId())
                 .email(savedUser.getEmail())
+                .role(savedUser.getRole())
                 .build();
     }
 
@@ -67,5 +74,62 @@ public class UserService {
                 .phone(user.getPhone())
                 .userCreated(user.getUserCreated())
                 .build();
+    }
+
+    public AuthResponse loginUser(LoginRequest request) {
+        // Authenticate user
+        UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                request.getEmail(),
+                request.getPassword()
+        );
+
+        AuthenticationManager authenticationManager = new AuthenticationManager() {
+            @Override
+            public Authentication authenticate(Authentication authentication) throws AuthenticationException {
+                UserDetails userDetails = userDetailsService.loadUserByUsername(authentication.getName());
+                if (passwordEncoder.matches(authentication.getCredentials().toString(), userDetails.getPassword())) {
+                    return new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+                }
+                throw new BadCredentialsException("Invalid credentials");
+            }
+        };
+
+        authenticationManager.authenticate(authToken);
+
+        // Generate JWT token
+        UserDetails userDetails = userDetailsService.loadUserByUsername(request.getEmail());
+        String token = jwtUtil.generateToken(userDetails);
+
+        // Find User by email to get userId
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        return AuthResponse.builder()
+                .token(token)
+                .userId(user.getUserId())
+                .email(userDetails.getUsername())
+                .build();
+    }
+
+    public String resetPassword(Long userId, String newPassword) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Update password
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setPasswordLastChanged(LocalDateTime.now());
+
+        userRepository.save(user);
+
+        return "Password reset successfully";
+    }
+
+    public void updateUserRole(Long userId, Role role) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Update role
+        user.setRole(role);
+        userRepository.save(user);
     }
 }

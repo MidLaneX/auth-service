@@ -154,30 +154,6 @@ src/
 - **Input Validation** - Request data validation
 - **Secure Headers** - Security headers configuration
 
-## 🗄️ Database Schema
-
-The service uses the following main entity:
-
-### User Entity
-```sql
-CREATE TABLE users (
-    user_id BIGSERIAL PRIMARY KEY,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    phone VARCHAR(20),
-    password_hash VARCHAR(255) NOT NULL,
-    password_last_changed TIMESTAMP,
-    user_created TIMESTAMP NOT NULL,
-    email_last_changed TIMESTAMP
-);
-```
-
-## 🧪 Testing
-
-Run the test suite:
-```bash
-mvn test
-```
-
 ## 📝 Environment Variables
 
 For production deployment, set these environment variables:
@@ -191,36 +167,8 @@ JWT_EXPIRATION=86400000
 SERVER_PORT=8081
 ```
 
-## 🚀 Deployment
 
-### Docker Deployment (Optional)
-```dockerfile
-FROM openjdk:21-jdk-slim
-COPY target/project-management-tool-auth-service-0.0.1-SNAPSHOT.jar app.jar
-EXPOSE 8081
-ENTRYPOINT ["java", "-jar", "/app.jar"]
-```
 
-### Building for Production
-```bash
-mvn clean package -Dmaven.test.skip=true
-```
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is part of a semester project for the SEP module.
-
-## 📧 Contact
-
-For questions or support, please contact the development team.
 
 ---
 
@@ -249,3 +197,9 @@ For questions or support, please contact the development team.
 ---
 
 **Note**: This is a development version. For production use, ensure to update JWT secrets, database credentials, and other security configurations.
+
+** To create a PostgreSQL container for development, you can use the following command:**
+
+```bash
+docker run -d -p 5434:5432 --name pg-auth-service -v postgres-data:/var/lib/postgresql/data -e POSTGRES_PASSWORD=pasindu postgres
+```

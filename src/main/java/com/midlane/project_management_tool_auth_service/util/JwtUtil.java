@@ -14,11 +14,12 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class JwtUtil {
 
-    @Value("${jwt.secret:defaultsecretkey}")
+    @Value("${jwt.secret:mySecretKey123456789012345678901234567890}")
     private String secretKeyString;
 
     @Value("${jwt.expiration:86400000}")
@@ -26,6 +27,11 @@ public class JwtUtil {
 
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
+    }
+
+    public String extractRole(String token) {
+        final Claims claims = extractAllClaims(token);
+        return claims.get("role", String.class);
     }
 
     public Date extractExpiration(String token) {
@@ -46,7 +52,8 @@ public class JwtUtil {
     }
 
     private Key getSigningKey() {
-        return Keys.secretKeyFor(SignatureAlgorithm.HS256);
+        byte[] keyBytes = secretKeyString.getBytes();
+        return Keys.hmacShaKeyFor(keyBytes);
     }
 
     private Boolean isTokenExpired(String token) {
@@ -55,6 +62,11 @@ public class JwtUtil {
 
     public String generateToken(UserDetails userDetails) {
         Map<String, Object> claims = new HashMap<>();
+        // Assuming authorities contain only one role, e.g., ROLE_ADMIN or ROLE_USER
+        String role = userDetails.getAuthorities().stream()
+                .map(auth -> auth.getAuthority())
+                .collect(Collectors.joining(","));
+        claims.put("role", role);
         return createToken(claims, userDetails.getUsername());
     }
 
