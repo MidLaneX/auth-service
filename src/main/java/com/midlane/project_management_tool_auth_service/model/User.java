@@ -27,6 +27,10 @@ public class User {
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "role", nullable = false)
+    private Role role = Role.USER; // Default to USER
+
     @Column(name = "password_last_changed")
     private LocalDateTime passwordLastChanged;
 
