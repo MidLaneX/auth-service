@@ -1,5 +1,6 @@
 package com.midlane.project_management_tool_auth_service.dto;
 
+import com.midlane.project_management_tool_auth_service.model.Role;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -15,5 +16,6 @@ public class UserDTO {
     private Long userId;
     private String email;
     private String phone;
+    private Enum<Role> role;
     private LocalDateTime userCreated;
 }

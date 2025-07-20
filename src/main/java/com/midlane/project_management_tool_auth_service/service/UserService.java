@@ -4,6 +4,7 @@ import com.midlane.project_management_tool_auth_service.dto.AuthResponse;
 import com.midlane.project_management_tool_auth_service.dto.LoginRequest;
 import com.midlane.project_management_tool_auth_service.dto.RegisterRequest;
 import com.midlane.project_management_tool_auth_service.dto.UserDTO;
+import com.midlane.project_management_tool_auth_service.model.Role;
 import com.midlane.project_management_tool_auth_service.model.User;
 import com.midlane.project_management_tool_auth_service.repository.UserRepository;
 import com.midlane.project_management_tool_auth_service.util.JwtUtil;
@@ -41,6 +42,7 @@ public class UserService {
         user.setEmail(request.getEmail());
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
         user.setPhone(request.getPhone());
+        user.setRole(Role.ADMIN);
         user.setPasswordLastChanged(LocalDateTime.now());
         user.setUserCreated(LocalDateTime.now());
         user.setEmailLastChanged(LocalDateTime.now());
@@ -55,6 +57,7 @@ public class UserService {
                 .token(token)
                 .userId(savedUser.getUserId())
                 .email(savedUser.getEmail())
+                .role(savedUser.getRole())
                 .build();
     }
 
@@ -106,5 +109,27 @@ public class UserService {
                 .userId(user.getUserId())
                 .email(userDetails.getUsername())
                 .build();
+    }
+
+    public String resetPassword(Long userId, String newPassword) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Update password
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setPasswordLastChanged(LocalDateTime.now());
+
+        userRepository.save(user);
+
+        return "Password reset successfully";
+    }
+
+    public void updateUserRole(Long userId, Role role) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Update role
+        user.setRole(role);
+        userRepository.save(user);
     }
 }
