@@ -17,6 +17,7 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -29,6 +30,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final AuthenticationManager authenticationManager;
     private final CustomUserDetailsService userDetailsService;
 
     public AuthResponse registerUser(RegisterRequest request) {
@@ -77,49 +79,56 @@ public class UserService {
     }
 
     public AuthResponse loginUser(LoginRequest request) {
-        // Authenticate user
-        UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                request.getEmail(),
-                request.getPassword()
-        );
+        try {
+            // Use the properly configured AuthenticationManager
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
+            );
 
-        AuthenticationManager authenticationManager = new AuthenticationManager() {
-            @Override
-            public Authentication authenticate(Authentication authentication) throws AuthenticationException {
-                UserDetails userDetails = userDetailsService.loadUserByUsername(authentication.getName());
-                if (passwordEncoder.matches(authentication.getCredentials().toString(), userDetails.getPassword())) {
-                    return new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
-                }
-                throw new BadCredentialsException("Invalid credentials");
-            }
-        };
+            // Generate JWT token
+            UserDetails userDetails = userDetailsService.loadUserByUsername(request.getEmail());
+            String token = jwtUtil.generateToken(userDetails);
 
-        authenticationManager.authenticate(authToken);
+            // Find User by email to get userId and role
+            User user = userRepository.findByEmail(request.getEmail())
+                    .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // Generate JWT token
-        UserDetails userDetails = userDetailsService.loadUserByUsername(request.getEmail());
-        String token = jwtUtil.generateToken(userDetails);
+            return AuthResponse.builder()
+                    .token(token)
+                    .userId(user.getUserId())
+                    .email(user.getEmail())
+                    .role(user.getRole()) // Include role in response
+                    .build();
 
-        // Find User by email to get userId
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        return AuthResponse.builder()
-                .token(token)
-                .userId(user.getUserId())
-                .email(userDetails.getUsername())
-                .build();
+        } catch (AuthenticationException ex) {
+            throw new BadCredentialsException("Invalid email or password");
+        }
     }
 
+    @Transactional
     public String resetPassword(Long userId, String newPassword) {
+        System.out.println("=== PASSWORD RESET DEBUG ===");
+
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // Update password
-        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        System.out.println("Original hash: " + user.getPasswordHash());
+
+        String encodedPassword = passwordEncoder.encode(newPassword);
+        System.out.println("New encoded password: " + encodedPassword);
+
+        user.setPasswordHash(encodedPassword);
         user.setPasswordLastChanged(LocalDateTime.now());
 
-        userRepository.save(user);
+        User savedUser = userRepository.saveAndFlush(user);
+        System.out.println("Returned saved hash: " + savedUser.getPasswordHash());
+
+        // Query database directly
+        User dbUser = userRepository.findById(userId).get();
+        System.out.println("Database queried hash: " + dbUser.getPasswordHash());
+
+        System.out.println("Encoded == Saved: " + encodedPassword.equals(savedUser.getPasswordHash()));
+        System.out.println("Encoded == DB: " + encodedPassword.equals(dbUser.getPasswordHash()));
 
         return "Password reset successfully";
     }

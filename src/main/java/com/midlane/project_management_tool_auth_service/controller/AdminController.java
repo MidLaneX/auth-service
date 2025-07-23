@@ -13,11 +13,17 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/admin")
+@RequestMapping("/api/auth/admin")
 @RequiredArgsConstructor
 public class AdminController {
 
     private final UserService userService;
+
+    @GetMapping("/test")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<String> testAdminEndpoint() {
+        return ResponseEntity.ok("Admin endpoint accessed successfully");
+    }
 
     @GetMapping("/all-users")
     @PreAuthorize("hasRole('ADMIN')")
@@ -25,11 +31,12 @@ public class AdminController {
         return ResponseEntity.ok(userService.getAllUsers());
     }
 
-    @PutMapping("/users/{userId}/reset-password")
+    @PutMapping("/{userId}/reset-password")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> resetPassword(
             @PathVariable Long userId,
             @RequestBody String newPassword) {
+        System.out.println("User ID: " + userId + ", New Password: " + newPassword);
         try {
             userService.resetPassword(userId, newPassword);
             return ResponseEntity.ok("Password reset successfully");
@@ -38,7 +45,7 @@ public class AdminController {
         }
     }
 
-    @PutMapping("/users/{userId}/role")
+    @PutMapping("/{userId}/role")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> updateUserRole(
             @PathVariable Long userId,
