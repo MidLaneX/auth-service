@@ -4,6 +4,7 @@ import com.midlane.project_management_tool_auth_service.dto.AuthResponse;
 import com.midlane.project_management_tool_auth_service.dto.LoginRequest;
 import com.midlane.project_management_tool_auth_service.dto.RegisterRequest;
 import com.midlane.project_management_tool_auth_service.dto.UserDTO;
+import com.midlane.project_management_tool_auth_service.dto.EmailVerificationRequest;
 import com.midlane.project_management_tool_auth_service.model.Role;
 import com.midlane.project_management_tool_auth_service.model.User;
 import com.midlane.project_management_tool_auth_service.repository.UserRepository;
@@ -17,6 +18,7 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -29,7 +31,9 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final AuthenticationManager authenticationManager;
     private final CustomUserDetailsService userDetailsService;
+    private final EmailVerificationService emailVerificationService;
 
     public AuthResponse registerUser(RegisterRequest request) {
         // Check if email already exists
@@ -37,19 +41,26 @@ public class UserService {
             throw new RuntimeException("Email is already in use");
         }
 
-        // Create new user
+        // Create new user with email verification disabled by default
         User user = new User();
         user.setEmail(request.getEmail());
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
         user.setPhone(request.getPhone());
-        user.setRole(Role.ADMIN);
+        user.setRole(Role.USER); // Default to USER role
+        user.setEmailVerified(false); // Email not verified initially
         user.setPasswordLastChanged(LocalDateTime.now());
         user.setUserCreated(LocalDateTime.now());
         user.setEmailLastChanged(LocalDateTime.now());
 
         User savedUser = userRepository.save(user);
 
-        // Generate JWT token
+        // Send verification email asynchronously
+        EmailVerificationRequest verificationRequest = EmailVerificationRequest.builder()
+            .email(savedUser.getEmail())
+            .build();
+        emailVerificationService.sendVerificationEmail(verificationRequest);
+
+        // Generate JWT token (user can access limited features until email is verified)
         UserDetails userDetails = userDetailsService.loadUserByUsername(savedUser.getEmail());
         String token = jwtUtil.generateToken(userDetails);
 
@@ -58,6 +69,8 @@ public class UserService {
                 .userId(savedUser.getUserId())
                 .email(savedUser.getEmail())
                 .role(savedUser.getRole())
+                .emailVerified(savedUser.getEmailVerified())
+                .message("Registration successful! Please check your email to verify your account.")
                 .build();
     }
 
@@ -77,49 +90,62 @@ public class UserService {
     }
 
     public AuthResponse loginUser(LoginRequest request) {
-        // Authenticate user
-        UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                request.getEmail(),
-                request.getPassword()
-        );
+        try {
+            // Use the properly configured AuthenticationManager
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
+            );
 
-        AuthenticationManager authenticationManager = new AuthenticationManager() {
-            @Override
-            public Authentication authenticate(Authentication authentication) throws AuthenticationException {
-                UserDetails userDetails = userDetailsService.loadUserByUsername(authentication.getName());
-                if (passwordEncoder.matches(authentication.getCredentials().toString(), userDetails.getPassword())) {
-                    return new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
-                }
-                throw new BadCredentialsException("Invalid credentials");
-            }
-        };
+            // Find User by email to get userId and role
+            User user = userRepository.findByEmail(request.getEmail())
+                    .orElseThrow(() -> new RuntimeException("User not found"));
 
-        authenticationManager.authenticate(authToken);
+            // Generate JWT token
+            UserDetails userDetails = userDetailsService.loadUserByUsername(request.getEmail());
+            String token = jwtUtil.generateToken(userDetails);
 
-        // Generate JWT token
-        UserDetails userDetails = userDetailsService.loadUserByUsername(request.getEmail());
-        String token = jwtUtil.generateToken(userDetails);
+            String message = user.getEmailVerified() ?
+                "Login successful!" :
+                "Login successful! Please verify your email to access all features.";
 
-        // Find User by email to get userId
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+            return AuthResponse.builder()
+                    .token(token)
+                    .userId(user.getUserId())
+                    .email(user.getEmail())
+                    .role(user.getRole())
+                    .emailVerified(user.getEmailVerified())
+                    .message(message)
+                    .build();
 
-        return AuthResponse.builder()
-                .token(token)
-                .userId(user.getUserId())
-                .email(userDetails.getUsername())
-                .build();
+        } catch (AuthenticationException ex) {
+            throw new BadCredentialsException("Invalid email or password");
+        }
     }
 
+    @Transactional
     public String resetPassword(Long userId, String newPassword) {
+        System.out.println("=== PASSWORD RESET DEBUG ===");
+
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // Update password
-        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        System.out.println("Original hash: " + user.getPasswordHash());
+
+        String encodedPassword = passwordEncoder.encode(newPassword);
+        System.out.println("New encoded password: " + encodedPassword);
+
+        user.setPasswordHash(encodedPassword);
         user.setPasswordLastChanged(LocalDateTime.now());
 
-        userRepository.save(user);
+        User savedUser = userRepository.saveAndFlush(user);
+        System.out.println("Returned saved hash: " + savedUser.getPasswordHash());
+
+        // Query database directly
+        User dbUser = userRepository.findById(userId).get();
+        System.out.println("Database queried hash: " + dbUser.getPasswordHash());
+
+        System.out.println("Encoded == Saved: " + encodedPassword.equals(savedUser.getPasswordHash()));
+        System.out.println("Encoded == DB: " + encodedPassword.equals(dbUser.getPasswordHash()));
 
         return "Password reset successfully";
     }

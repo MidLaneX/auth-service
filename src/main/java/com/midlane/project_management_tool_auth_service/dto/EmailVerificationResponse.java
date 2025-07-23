@@ -1,6 +1,5 @@
 package com.midlane.project_management_tool_auth_service.dto;
 
-import com.midlane.project_management_tool_auth_service.model.Role;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -10,11 +9,10 @@ import lombok.NoArgsConstructor;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class AuthResponse {
-    private String token;
-    private Long userId;
-    private String email;
-    private Enum<Role> role;
-    private Boolean emailVerified;
+public class EmailVerificationResponse {
     private String message;
+    private boolean success;
+    private String email;
+    private boolean verified;
+    private boolean hasPendingToken;
 }
