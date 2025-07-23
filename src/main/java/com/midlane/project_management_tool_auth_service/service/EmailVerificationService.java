@@ -202,4 +202,15 @@ public class EmailVerificationService {
             log.error("Failed to cleanup expired tokens", e);
         }
     }
+
+    public boolean isEmailVerified(String email) {
+        try {
+            User user = userRepository.findByEmail(email)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+            return user.getEmailVerified();
+        } catch (Exception e) {
+            log.error("Failed to check email verification status for: {}", email, e);
+            return false;
+        }
+    }
 }
