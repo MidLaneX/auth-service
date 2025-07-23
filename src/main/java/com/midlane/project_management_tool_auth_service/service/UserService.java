@@ -4,6 +4,7 @@ import com.midlane.project_management_tool_auth_service.dto.AuthResponse;
 import com.midlane.project_management_tool_auth_service.dto.LoginRequest;
 import com.midlane.project_management_tool_auth_service.dto.RegisterRequest;
 import com.midlane.project_management_tool_auth_service.dto.UserDTO;
+import com.midlane.project_management_tool_auth_service.dto.EmailVerificationRequest;
 import com.midlane.project_management_tool_auth_service.model.Role;
 import com.midlane.project_management_tool_auth_service.model.User;
 import com.midlane.project_management_tool_auth_service.repository.UserRepository;
@@ -32,6 +33,7 @@ public class UserService {
     private final JwtUtil jwtUtil;
     private final AuthenticationManager authenticationManager;
     private final CustomUserDetailsService userDetailsService;
+    private final EmailVerificationService emailVerificationService;
 
     public AuthResponse registerUser(RegisterRequest request) {
         // Check if email already exists
@@ -39,19 +41,26 @@ public class UserService {
             throw new RuntimeException("Email is already in use");
         }
 
-        // Create new user
+        // Create new user with email verification disabled by default
         User user = new User();
         user.setEmail(request.getEmail());
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
         user.setPhone(request.getPhone());
-        user.setRole(Role.ADMIN);
+        user.setRole(Role.USER); // Default to USER role
+        user.setEmailVerified(false); // Email not verified initially
         user.setPasswordLastChanged(LocalDateTime.now());
         user.setUserCreated(LocalDateTime.now());
         user.setEmailLastChanged(LocalDateTime.now());
 
         User savedUser = userRepository.save(user);
 
-        // Generate JWT token
+        // Send verification email asynchronously
+        EmailVerificationRequest verificationRequest = EmailVerificationRequest.builder()
+            .email(savedUser.getEmail())
+            .build();
+        emailVerificationService.sendVerificationEmail(verificationRequest);
+
+        // Generate JWT token (user can access limited features until email is verified)
         UserDetails userDetails = userDetailsService.loadUserByUsername(savedUser.getEmail());
         String token = jwtUtil.generateToken(userDetails);
 
@@ -60,6 +69,8 @@ public class UserService {
                 .userId(savedUser.getUserId())
                 .email(savedUser.getEmail())
                 .role(savedUser.getRole())
+                .emailVerified(savedUser.getEmailVerified())
+                .message("Registration successful! Please check your email to verify your account.")
                 .build();
     }
 
@@ -85,19 +96,25 @@ public class UserService {
                     new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
             );
 
+            // Find User by email to get userId and role
+            User user = userRepository.findByEmail(request.getEmail())
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
             // Generate JWT token
             UserDetails userDetails = userDetailsService.loadUserByUsername(request.getEmail());
             String token = jwtUtil.generateToken(userDetails);
 
-            // Find User by email to get userId and role
-            User user = userRepository.findByEmail(request.getEmail())
-                    .orElseThrow(() -> new RuntimeException("User not found"));
+            String message = user.getEmailVerified() ?
+                "Login successful!" :
+                "Login successful! Please verify your email to access all features.";
 
             return AuthResponse.builder()
                     .token(token)
                     .userId(user.getUserId())
                     .email(user.getEmail())
-                    .role(user.getRole()) // Include role in response
+                    .role(user.getRole())
+                    .emailVerified(user.getEmailVerified())
+                    .message(message)
                     .build();
 
         } catch (AuthenticationException ex) {

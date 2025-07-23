@@ -40,4 +40,7 @@ public class User {
 
     @Column(name = "email_last_changed")
     private LocalDateTime emailLastChanged;
+
+    @Column(name = "email_verified", nullable = false)
+    private Boolean emailVerified = false; // Default to false
 }

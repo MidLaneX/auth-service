@@ -1,205 +1,275 @@
 # Project Management Tool - Authentication Service
 
-A secure authentication microservice built with Spring Boot 3.5.3 and Java 21, providing JWT-based authentication and user management for a project management system.
+## 🎯 Overview
+
+A robust Spring Boot authentication service for the Project Management Tool that provides secure user registration, login, email verification, JWT token management, and role-based access control (RBAC).
 
 ## 🚀 Features
 
-- **User Registration** - Secure user account creation with email validation
-- **JWT Authentication** - Stateless authentication using JSON Web Tokens
-- **Password Security** - BCrypt password hashing for enhanced security
-- **User Management** - Retrieve user information (excluding sensitive data)
-- **Database Integration** - PostgreSQL database with JPA/Hibernate
-- **Security Configuration** - Spring Security with custom filters
-- **RESTful API** - Clean REST endpoints following best practices
-
-## 🛠️ Tech Stack
-
-- **Java 21** - Latest LTS version of Java
-- **Spring Boot 3.5.3** - Modern Spring framework
-- **Spring Security** - Authentication and authorization
-- **Spring Data JPA** - Data persistence layer
-- **PostgreSQL** - Primary database
-- **JWT (JSON Web Tokens)** - Stateless authentication
-- **Lombok** - Reducing boilerplate code
-- **Maven** - Dependency management and build tool
+- **User Registration & Login** - Secure user authentication with email verification
+- **JWT Token Management** - Stateless authentication using JSON Web Tokens
+- **Email Verification** - Email-based account verification with HTML templates
+- **Role-Based Access Control (RBAC)** - Admin and User role management
+- **Password Security** - BCrypt password hashing
+- **Email Services** - Welcome emails, password reset, and verification emails
+- **RESTful API** - Clean REST endpoints for all authentication operations
+- **Environment Configuration** - Secure configuration management with .env files
 
 ## 📋 Prerequisites
 
-Before running this application, make sure you have:
+Before running this service, ensure you have:
 
-- Java 21 or higher installed
-- Maven 3.6+ installed
-- PostgreSQL database server running
-- Git for version control
+- **Java 17+** installed
+- **Maven 3.6+** installed
+- **PostgreSQL 12+** running on port 5434
+- **Gmail App Password** for email services (optional but recommended)
 
-## ⚙️ Installation & Setup
+## 🛠️ Technology Stack
 
-### 1. Clone the Repository
-```bash
-git clone <repository-url>
-cd auth-service
+- **Spring Boot 3.x** - Main framework
+- **Spring Security 6.x** - Authentication and authorization
+- **Spring Data JPA** - Database operations
+- **PostgreSQL** - Primary database
+- **JWT (JSON Web Tokens)** - Stateless authentication
+- **JavaMailSender** - Email services
+- **Lombok** - Reduce boilerplate code
+- **BCrypt** - Password hashing
+
+## 📁 Project Structure
+
+```
+src/main/java/com/midlane/project_management_tool_auth_service/
+├── config/           # Configuration classes
+├── controller/       # REST API controllers
+├── dto/             # Data Transfer Objects
+├── exception/       # Custom exceptions
+├── model/           # JPA entities
+├── repository/      # Data access layer
+├── security/        # Security configuration & JWT
+├── service/         # Business logic
+└── util/           # Utility classes
 ```
 
-### 2. Database Setup
-Create a PostgreSQL database:
+## ⚙️ Configuration
+
+### 1. Environment Setup
+
+Copy the `.env.example` to `.env` and configure:
+
+```env
+# Database Configuration
+DB_URL=jdbc:postgresql://localhost:5434/auth_service_db
+DB_USERNAME=postgres
+DB_PASSWORD=postgres
+
+# Server Configuration
+SERVER_PORT=8081
+
+# JWT Configuration
+JWT_SECRET=dGhpcyBpcyBhIDI1NiBiaXQgc2VjdXJlIGtleSBmb3IgSldUIGF1dGhlbnRpY2F0aW9uIQ==
+JWT_EXPIRATION=86400000
+
+# Email Configuration
+MAIL_USERNAME=your-email@gmail.com
+MAIL_PASSWORD=your-app-password
+MAIL_FROM=noreply@projectmanagement.com
+FRONTEND_URL=http://localhost:5173
+```
+
+### 2. Gmail Configuration (Email Services)
+
+To enable email services:
+
+1. Go to [Google Account Settings](https://myaccount.google.com)
+2. Enable **2-Factor Authentication**
+3. Navigate to **Security > 2-Step Verification > App passwords**
+4. Generate a new app password for "Mail"
+5. Use the 16-digit code in `MAIL_PASSWORD`
+6. Replace `MAIL_USERNAME` with your Gmail address
+
+### 3. Database Setup
+
+Create PostgreSQL database:
+
 ```sql
 CREATE DATABASE auth_service_db;
 ```
 
-### 3. Configure Application Properties
-Update `src/main/resources/application.properties`:
-```properties
-# Database Configuration
-spring.datasource.url=jdbc:postgresql://localhost:5433/auth_service_db
-spring.datasource.username=your_username
-spring.datasource.password=your_password
+The application will automatically create tables on startup.
 
-# Server Configuration
-server.port=8081
+## 🚀 Running the Application
 
-# JWT Configuration (Update for production)
-jwt.secret=yourSecretKeyHereShouldBeLongAndComplexForProductionEnvironment
-jwt.expiration=86400000
-```
+### Method 1: Using Maven
 
-### 4. Build and Run
 ```bash
-# Build the project
+# Install dependencies
 mvn clean install
 
 # Run the application
 mvn spring-boot:run
 ```
 
-The service will start on `http://localhost:8081`
+### Method 2: Using JAR
 
-## 📚 API Documentation
+```bash
+# Build JAR
+mvn clean package
 
-### Base URL
+# Run JAR
+java -jar target/project-management-tool-auth-service-0.0.1-SNAPSHOT.jar
 ```
-http://localhost:8081/api/auth
+
+The service will start on `http://localhost:8082`
+
+## 📡 API Endpoints
+
+### Authentication Endpoints
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| POST | `/api/auth/register` | User registration | No |
+| POST | `/api/auth/login` | User login | No |
+| GET | `/api/auth/verify-email` | Email verification | No |
+| POST | `/api/auth/resend-verification` | Resend verification email | No |
+
+### User Management Endpoints
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/api/users/profile` | Get user profile | Yes |
+| GET | `/api/users/all` | Get all users (non-sensitive data) | Yes (USER) |
+
+### Admin Endpoints
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/api/admin/users` | Get all users with full details | Yes (ADMIN) |
+| DELETE | `/api/admin/users/{id}` | Delete user | Yes (ADMIN) |
+| PUT | `/api/admin/users/{id}/role` | Update user role | Yes (ADMIN) |
+
+## 📝 API Usage Examples
+
+### 1. User Registration
+
+```bash
+curl -X POST http://localhost:8082/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "securePassword123",
+    "phone": "+1234567890"
+  }'
 ```
 
-### Endpoints
-
-#### 1. User Registration
-**POST** `/register`
-
-Register a new user account.
-
-**Request Body:**
+**Response:**
 ```json
 {
-  "email": "user@example.com",
-  "password": "securePassword123",
-  "phone": "+1234567890"
+  "message": "Registration successful. Please check your email for verification.",
+  "success": true
 }
+```
+
+### 2. User Login
+
+```bash
+curl -X POST http://localhost:8082/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "securePassword123"
+  }'
 ```
 
 **Response:**
 ```json
 {
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "userId": 1,
-  "email": "user@example.com"
+  "email": "user@example.com",
+  "role": "USER",
+  "expiresIn": 86400000
 }
 ```
 
-#### 2. Get All Users
-**GET** `/users`
+### 3. Get All Users (Non-Sensitive)
 
-Retrieve all registered users (non-sensitive information only).
+```bash
+curl -X GET http://localhost:8082/api/users/all \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
 
 **Response:**
 ```json
 [
   {
     "userId": 1,
-    "email": "user1@example.com",
+    "email": "user@example.com",
     "phone": "+1234567890",
-    "userCreated": "2025-07-17T15:30:45.123"
-  },
-  {
-    "userId": 2,
-    "email": "user2@example.com",
-    "phone": "+0987654321",
-    "userCreated": "2025-07-17T16:45:22.456"
+    "role": "USER",
+    "userCreated": "2025-01-15T10:30:00"
   }
 ]
 ```
 
-## 🏗️ Project Structure
+## 🔐 Security Features
 
-```
-src/
-├── main/
-│   ├── java/com/midlane/project_management_tool_auth_service/
-│   │   ├── config/          # Security and JWT configuration
-│   │   ├── controller/      # REST API controllers
-│   │   ├── dto/            # Data Transfer Objects
-│   │   ├── model/          # JPA entities
-│   │   ├── repository/     # Data access layer
-│   │   ├── service/        # Business logic
-│   │   └── util/           # Utility classes
-│   └── resources/
-│       └── application.properties
-└── test/                   # Unit and integration tests
-```
+### JWT Token Authentication
+- **256-bit secure key** for token signing
+- **24-hour expiration** (configurable)
+- **Stateless authentication** - no server-side sessions
 
-## 🔒 Security Features
+### Password Security
+- **BCrypt hashing** with secure rounds
+- **Minimum password requirements** (can be configured)
 
-- **JWT Authentication** - Secure stateless authentication
-- **Password Hashing** - BCrypt encryption for password storage
-- **CORS Configuration** - Cross-origin resource sharing setup
-- **Input Validation** - Request data validation
-- **Secure Headers** - Security headers configuration
+### Role-Based Access Control (RBAC)
+- **USER Role**: Basic user operations
+- **ADMIN Role**: Full administrative access
+- **Endpoint-level security** with method annotations
 
-## 📝 Environment Variables
+### Email Verification
+- **Secure token generation** for email verification
+- **24-hour expiration** for verification links
+- **HTML email templates** with professional styling
 
-For production deployment, set these environment variables:
+#### 2. Email Authentication Failed
+- Ensure 2FA is enabled on your Google account
+- Use App Password, not your regular Gmail password
+- Check that `MAIL_USERNAME` and `MAIL_PASSWORD` are correctly set in `.env`
 
-```bash
-SPRING_DATASOURCE_URL=jdbc:postgresql://your-db-host:5432/auth_service_db
-SPRING_DATASOURCE_USERNAME=your_username
-SPRING_DATASOURCE_PASSWORD=your_password
-JWT_SECRET=your-super-secure-jwt-secret-key
-JWT_EXPIRATION=86400000
-SERVER_PORT=8081
-```
+#### 3. JWT Token Issues
+- Ensure `JWT_SECRET` is at least 256-bit (32+ characters)
+- Check token expiration time
+- Verify Bearer token format in requests
 
+#### 4. Database Connection Issues
+- Ensure PostgreSQL is running on port 5434
+- Check database credentials in `.env`
+- Verify database `auth_service_db` exists
 
+### Logs
 
+Application logs provide detailed information:
+- **INFO level**: Normal operations
+- **ERROR level**: Exceptions and failures
+- **DEBUG level**: Detailed debugging (development only)
 
----
+## 🧪 Testing
 
-## 🔮 Future Enhancements
+### Manual Testing with Postman
 
-- [ ] User login functionality
-- [ ] Password reset via email
-- [ ] Multi-factor authentication (MFA)
-- [ ] OAuth2 integration
-- [ ] User role management
-- [ ] Account verification
-- [ ] Audit logging
-- [ ] Rate limiting
-- [ ] API documentation with Swagger
-- [ ] Docker containerization
+1. Import the API endpoints into Postman
+2. Register a new user
+3. Check email for verification link
+4. Login with verified credentials
+5. Test protected endpoints with JWT token
 
-## 📊 Status
-
-- ✅ User Registration
-- ✅ JWT Token Generation
-- ✅ User Data Retrieval
-- ✅ Security Configuration
-- 🔄 Login Functionality (In Progress)
-- 🔄 Authentication Middleware (In Progress)
-
----
-
-**Note**: This is a development version. For production use, ensure to update JWT secrets, database credentials, and other security configurations.
-
-** To create a PostgreSQL container for development, you can use the following command:**
+### Health Check
 
 ```bash
-docker run -d -p 5434:5432 --name pg-auth-service -v postgres-data:/var/lib/postgresql/data -e POSTGRES_PASSWORD=pasindu postgres
+curl http://localhost:8081/actuator/health
 ```
+
+
+
+**Last Updated**: July 2025
+**Version**: 0.0.1-SNAPSHOT
