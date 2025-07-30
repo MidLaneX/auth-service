@@ -22,9 +22,7 @@ public class CustomUserDetailsService implements UserDetailsService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
 
-        // Debug: Print the loaded password hash
-        System.out.println("Loading user: " + email);
-        System.out.println("Loaded password hash: " + user.getPasswordHash());
+// Removed debug statements that log sensitive information.
 
         return org.springframework.security.core.userdetails.User.builder()
                 .username(user.getEmail())
