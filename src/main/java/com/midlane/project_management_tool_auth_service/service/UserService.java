@@ -5,6 +5,9 @@ import com.midlane.project_management_tool_auth_service.dto.LoginRequest;
 import com.midlane.project_management_tool_auth_service.dto.RegisterRequest;
 import com.midlane.project_management_tool_auth_service.dto.UserDTO;
 import com.midlane.project_management_tool_auth_service.dto.EmailVerificationRequest;
+import com.midlane.project_management_tool_auth_service.dto.SocialLoginRequest;
+import com.midlane.project_management_tool_auth_service.dto.SocialUserInfo;
+import com.midlane.project_management_tool_auth_service.model.AuthProvider;
 import com.midlane.project_management_tool_auth_service.model.Role;
 import com.midlane.project_management_tool_auth_service.model.User;
 import com.midlane.project_management_tool_auth_service.repository.UserRepository;
@@ -22,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -34,6 +38,7 @@ public class UserService {
     private final AuthenticationManager authenticationManager;
     private final CustomUserDetailsService userDetailsService;
     private final EmailVerificationService emailVerificationService;
+    private final SocialAuthService socialAuthService;
 
     public AuthResponse registerUser(RegisterRequest request) {
         // Check if email already exists
@@ -124,28 +129,15 @@ public class UserService {
 
     @Transactional
     public String resetPassword(Long userId, String newPassword) {
-        System.out.println("=== PASSWORD RESET DEBUG ===");
-
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        System.out.println("Original hash: " + user.getPasswordHash());
-
+        // Encode the new password and update user
         String encodedPassword = passwordEncoder.encode(newPassword);
-        System.out.println("New encoded password: " + encodedPassword);
-
         user.setPasswordHash(encodedPassword);
         user.setPasswordLastChanged(LocalDateTime.now());
 
-        User savedUser = userRepository.saveAndFlush(user);
-        System.out.println("Returned saved hash: " + savedUser.getPasswordHash());
-
-        // Query database directly
-        User dbUser = userRepository.findById(userId).get();
-        System.out.println("Database queried hash: " + dbUser.getPasswordHash());
-
-        System.out.println("Encoded == Saved: " + encodedPassword.equals(savedUser.getPasswordHash()));
-        System.out.println("Encoded == DB: " + encodedPassword.equals(dbUser.getPasswordHash()));
+        userRepository.save(user);
 
         return "Password reset successfully";
     }
@@ -157,5 +149,76 @@ public class UserService {
         // Update role
         user.setRole(role);
         userRepository.save(user);
+    }
+
+    @Transactional
+    public AuthResponse authenticateWithSocial(SocialLoginRequest request) {
+        // Log for error tracking
+        System.out.println("Social login request: " + request);
+
+        // Get user info from social provider
+        SocialUserInfo socialUserInfo = socialAuthService.getUserInfo(request.getProvider(), request.getAccessToken());
+
+        if (socialUserInfo.getEmail() == null || socialUserInfo.getEmail().isEmpty()) {
+            throw new RuntimeException("Email not provided by " + request.getProvider() + " provider");
+        }
+
+        // Check if user exists by email
+        Optional<User> existingUser = userRepository.findByEmail(socialUserInfo.getEmail());
+
+        User user;
+        boolean isNewUser = false;
+
+        if (existingUser.isPresent()) {
+            user = existingUser.get();
+            // Update social provider info if it's a local account being linked
+            if (user.getProvider() == AuthProvider.LOCAL) {
+                user.setProvider(AuthProvider.valueOf(socialUserInfo.getProvider().toUpperCase()));
+                user.setProviderId(socialUserInfo.getId());
+                user.setFirstName(socialUserInfo.getFirstName());
+                user.setLastName(socialUserInfo.getLastName());
+                user.setProfilePictureUrl(socialUserInfo.getProfilePictureUrl());
+                if (socialUserInfo.isEmailVerified()) {
+                    user.setEmailVerified(true);
+                }
+                userRepository.save(user);
+            }
+        } else {
+            // Create new user from social login
+            user = createUserFromSocialInfo(socialUserInfo);
+            isNewUser = true;
+        }
+
+        // Generate JWT token
+        UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
+        String token = jwtUtil.generateToken(userDetails);
+
+        String message = isNewUser ?
+            "Registration successful via " + request.getProvider() + "!" :
+            "Login successful via " + request.getProvider() + "!";
+
+        return AuthResponse.builder()
+                .token(token)
+                .userId(user.getUserId())
+                .email(user.getEmail())
+                .role(user.getRole())
+                .emailVerified(user.getEmailVerified())
+                .message(message)
+                .build();
+    }
+
+    private User createUserFromSocialInfo(SocialUserInfo socialUserInfo) {
+        User user = new User();
+        user.setEmail(socialUserInfo.getEmail());
+        user.setFirstName(socialUserInfo.getFirstName());
+        user.setLastName(socialUserInfo.getLastName());
+        user.setProfilePictureUrl(socialUserInfo.getProfilePictureUrl());
+        user.setProvider(AuthProvider.valueOf(socialUserInfo.getProvider().toUpperCase()));
+        user.setProviderId(socialUserInfo.getId());
+        user.setRole(Role.USER);
+        user.setEmailVerified(socialUserInfo.isEmailVerified());
+        user.setUserCreated(LocalDateTime.now());
+
+        return userRepository.save(user);
     }
 }
