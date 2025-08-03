@@ -1,309 +1,251 @@
-# Project Management Tool - Auth Service
+# Project Management Tool - Authentication Service
 
-A comprehensive authentication service for the Project Management Tool with JWT-based authentication, email verification, and social login support (Google & Facebook).
+A comprehensive authentication microservice built with Spring Boot, providing secure user authentication, email verification, social login, and JWT token management.
 
-## Features
+## 🚀 Features
 
-- **User Registration & Login** - Traditional email/password authentication
-- **JWT Token Authentication** - Secure stateless authentication
-- **Email Verification** - Email verification system with secure tokens
-- **Social Login** - Google and Facebook OAuth integration
-- **Role-Based Access Control (RBAC)** - Admin and User roles
-- **Password Reset** - Secure password reset functionality
-- **User Management** - Admin endpoints for user management
+- **User Registration & Login** with email verification
+- **JWT Authentication** with secure token management
+- **Social Login** (Google OAuth2)
+- **Password Reset** functionality
+- **Role-Based Access Control** (RBAC) - Admin and User roles
+- **Email Verification** with HTML templates
+- **Secure Password Encryption** using BCrypt
+- **API Documentation** with Swagger/OpenAPI
+- **Docker Support** for containerization
 
-## API Endpoints
+## 📋 Prerequisites
 
-### Authentication Endpoints
+- Java 21 or higher
+- Maven 3.6+
+- PostgreSQL database
+- Gmail account for email services (with App Password)
+- Google OAuth2 credentials (for social login)
 
-#### Traditional Authentication
-- `POST /api/auth/initial/register` - User registration
-- `POST /api/auth/initial/login` - User login
+## 🛠️ Quick Setup
 
-#### Social Authentication
-- `POST /api/auth/initial/social/login` - Generic social login (specify provider in request)
-- `POST /api/auth/initial/social/google` - Google OAuth login
-- `POST /api/auth/initial/social/facebook` - Facebook OAuth login
-
-#### Email Verification
-- `POST /api/auth/email/send-verification` - Send verification email
-- `GET /api/auth/email/verify` - Verify email with token
-- `POST /api/auth/email/resend-verification` - Resend verification email
-
-#### Password Management
-- `POST /api/auth/password/forgot` - Request password reset
-- `POST /api/auth/password/reset` - Reset password with token
-
-### User Management Endpoints
-
-#### User Endpoints
-- `GET /api/user/profile` - Get user profile
-- `PUT /api/user/profile` - Update user profile
-
-#### Admin Endpoints
-- `GET /api/admin/users` - Get all users (Admin only)
-- `PUT /api/admin/users/{userId}/role` - Update user role (Admin only)
-
-## Social Login Implementation
-
-### Google Login Flow
-
-1. **Frontend Integration**
-   - Use Google Sign-In JavaScript library or OAuth2 flow
-   - Obtain access token from Google
-   - Send token to backend
-
-2. **API Request**
-   ```json
-   POST /api/auth/initial/social/google
-   {
-     "accessToken": "google_access_token_here"
-   }
-   ```
-
-3. **Response**
-   ```json
-   {
-     "token": "jwt_token",
-     "userId": 123,
-     "email": "user@example.com",
-     "role": "USER",
-     "emailVerified": true,
-     "message": "Login successful via google!"
-   }
-   ```
-
-### Facebook Login Flow
-
-1. **Frontend Integration**
-   - Use Facebook SDK for JavaScript or OAuth2 flow
-   - Obtain access token from Facebook
-   - Send token to backend
-
-2. **API Request**
-   ```json
-   POST /api/auth/initial/social/facebook
-   {
-     "accessToken": "facebook_access_token_here"
-   }
-   ```
-
-3. **Response**
-   ```json
-   {
-     "token": "jwt_token",
-     "userId": 124,
-     "email": "user@facebook.com",
-     "role": "USER",
-     "emailVerified": true,
-     "message": "Login successful via facebook!"
-   }
-   ```
-
-### Generic Social Login
-
-For flexibility, you can also use the generic endpoint:
-
-```json
-POST /api/auth/initial/social/login
-{
-  "accessToken": "provider_access_token_here",
-  "provider": "google" // or "facebook"
-}
+### 1. Clone and Navigate
+```bash
+git clone <repository-url>
+cd auth-service
 ```
 
-## Request/Response Examples
-
-### User Registration
-```json
-POST /api/auth/initial/register
-{
-  "email": "user@example.com",
-  "password": "securePassword123",
-  "phone": "+1234567890"
-}
-```
-
-### User Login
-```json
-POST /api/auth/initial/login
-{
-  "email": "user@example.com",
-  "password": "securePassword123"
-}
-```
-
-### Successful Authentication Response
-```json
-{
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "userId": 123,
-  "email": "user@example.com",
-  "role": "USER",
-  "emailVerified": true,
-  "message": "Login successful!"
-}
-```
-
-### Error Response
-```json
-{
-  "error": "INVALID_CREDENTIALS",
-  "message": "Invalid email or password"
-}
-```
-
-## Social Login User Flow
-
-### New User (First-time Social Login)
-1. User authenticates with Google/Facebook
-2. System creates new user account with social provider data
-3. Email is automatically verified (if provided by social provider)
-4. User gets JWT token and can access the application
-
-### Existing User (Linking Social Account)
-1. User with existing local account logs in via social provider
-2. System links social provider to existing account
-3. User can now login using either method (local or social)
-
-### Existing Social User (Subsequent Logins)
-1. User logs in with same social provider
-2. System recognizes existing account
-3. User gets JWT token immediately
-
-## Environment Configuration
-
-### Required Environment Variables
+### 2. Environment Configuration
+Create a `.env` file in the root directory:
 
 ```env
 # Database Configuration
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=auth_service_db
-DB_USERNAME=your_db_user
-DB_PASSWORD=your_db_password
+DB_URL=jdbc:postgresql://your-db-host:5432/auth_service_db
+DB_USERNAME=your-db-username
+DB_PASSWORD=your-db-password
 
-# JWT Configuration
-JWT_SECRET=your_256_bit_secret_key_here
+# Server Configuration
+SERVER_PORT=8081
+
+# JWT Configuration (Generate a secure 256-bit key)
+JWT_SECRET=your-secure-jwt-secret-key-here
 JWT_EXPIRATION=86400000
 
-# Email Configuration (Gmail SMTP)
-MAIL_HOST=smtp.gmail.com
-MAIL_PORT=587
-MAIL_USERNAME=your_email@gmail.com
-MAIL_PASSWORD=your_app_password
-MAIL_FROM=your_email@gmail.com
+# Email Configuration (Gmail)
+MAIL_USERNAME=your-email@gmail.com
+MAIL_PASSWORD=your-gmail-app-password
+MAIL_FROM=noreply@projectmanagement.com
 
-# Application Configuration
-SERVER_PORT=8080
-APP_BASE_URL=http://localhost:8080
+# Frontend Configuration
+FRONTEND_URL=http://localhost:5173
+
+# Google OAuth Configuration
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
 ```
 
-### Gmail Setup for Email Verification
-
-1. Enable 2-Factor Authentication on your Gmail account
-2. Generate an App Password:
-   - Go to Google Account settings
-   - Security → 2-Step Verification → App passwords
-   - Generate password for "Mail"
-3. Use the generated app password as `MAIL_PASSWORD`
-
-## Running the Application
-
-### Using Docker Compose (Recommended)
-
-```bash
-# Start all services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f auth-service
-
-# Stop services
-docker-compose down
-```
-
-### Using Maven
-
+### 3. Build and Run
 ```bash
 # Install dependencies
 mvn clean install
 
-# Run application
+# Run the application
 mvn spring-boot:run
-
-# Or run jar file
-java -jar target/project-management-tool-auth-service-0.0.1-SNAPSHOT.jar
 ```
 
-## Security Features
+The service will start on `http://localhost:8081`
 
-- **JWT Authentication** - Stateless token-based authentication
-- **Password Encoding** - BCrypt password hashing
-- **CORS Configuration** - Cross-origin resource sharing setup
-- **Rate Limiting** - Protection against brute force attacks
-- **Input Validation** - Request validation with proper error handling
-- **Social OAuth** - Secure integration with Google and Facebook
+## 📚 API Documentation
 
-## Database Schema
+Once running, access the Swagger UI at:
+- **Swagger UI**: http://localhost:8081/swagger-ui.html
+- **API Docs**: http://localhost:8081/v3/api-docs
 
-The service uses PostgreSQL with the following key tables:
+## 🔗 API Endpoints
 
-- **users** - User account information
-- **email_verification_tokens** - Email verification tokens
-- **password_reset_tokens** - Password reset tokens
+### Authentication Endpoints
+```
+POST /api/auth/register          # User registration
+POST /api/auth/login             # User login
+POST /api/auth/social-login      # Social login (Google)
+POST /api/auth/refresh           # Refresh JWT token
+POST /api/auth/forgot-password   # Request password reset
+POST /api/auth/reset-password    # Reset password
+```
 
-Key user fields for social login:
-- `provider` - Authentication provider (LOCAL, GOOGLE, FACEBOOK)
-- `provider_id` - Social provider user ID
-- `first_name`, `last_name` - User names from social providers
-- `profile_picture_url` - Profile picture from social providers
+### User Management
+```
+GET  /api/users                  # Get all users (Admin only)
+GET  /api/users/profile          # Get current user profile
+PUT  /api/users/profile          # Update user profile
+```
 
-## API Documentation
+### Email Verification
+```
+POST /api/email/send-verification    # Send verification email
+GET  /api/email/verify              # Verify email with token
+POST /api/email/resend-verification  # Resend verification email
+```
 
-When the application is running, you can access:
-- **Swagger UI**: http://localhost:8080/swagger-ui/index.html
-- **API Docs**: http://localhost:8080/v3/api-docs
+### Admin Endpoints
+```
+GET  /api/admin/users           # Get all users
+PUT  /api/admin/users/{id}/role # Update user role
+DELETE /api/admin/users/{id}    # Delete user
+```
 
-## Error Handling
+## 📧 Email Configuration
 
-The API provides consistent error responses with appropriate HTTP status codes:
+### Gmail Setup
+1. Enable 2-Factor Authentication on your Gmail account
+2. Generate an App Password:
+   - Go to Google Account settings
+   - Security → App passwords
+   - Generate a password for "Mail"
+3. Use this App Password in your `.env` file
 
-- `400 Bad Request` - Invalid request data
-- `401 Unauthorized` - Authentication required
-- `403 Forbidden` - Insufficient permissions
-- `404 Not Found` - Resource not found
-- `409 Conflict` - Resource already exists
-- `500 Internal Server Error` - Server error
+## 🔐 Security Features
 
-## Development Notes
+- **JWT Authentication** with secure token generation
+- **Password Encryption** using BCrypt
+- **Email Verification** mandatory for account activation
+- **Role-Based Access Control** (ADMIN, USER)
+- **Rate Limiting** for authentication endpoints
+- **CORS Configuration** for frontend integration
 
-### Adding New Social Providers
+## 🏗️ Project Structure
 
-To add a new social provider:
+```
+src/main/java/com/midlane/project_management_tool_auth_service/
+├── config/          # Configuration classes
+├── controller/      # REST controllers
+├── dto/            # Data Transfer Objects
+├── exception/      # Custom exceptions
+├── model/          # JPA entities
+├── repository/     # JPA repositories
+├── security/       # Security configurations
+├── service/        # Business logic
+└── util/           # Utility classes
+```
 
-1. Add provider to `AuthProvider` enum
-2. Implement provider-specific user info fetching in `SocialAuthService`
-3. Add endpoint in `AuthController`
-4. Update documentation
+## 🐳 Docker Support
 
-### Testing Social Login
+### Build Docker Image
+```bash
+docker build -t auth-service:latest .
+```
 
-For testing social login integration:
+### Run with Docker Compose
+```bash
+docker-compose up -d
+```
 
-1. Set up Google/Facebook developer applications
-2. Configure OAuth callback URLs
-3. Use provider SDKs in frontend to obtain access tokens
-4. Test with real tokens from provider APIs
+This will start:
+- PostgreSQL database on port 5432
+- Auth service on port 8081
 
-## Support
+## 🔧 Development
+
+### Running Tests
+```bash
+mvn test
+```
+
+### Building for Production
+```bash
+mvn clean package -DskipTests
+```
+
+### Environment Profiles
+- `dev` - Development with H2 database
+- `prod` - Production with PostgreSQL
+
+## 🚨 Troubleshooting
+
+### Common Issues
+
+1. **Database Connection Failed**
+   - Verify PostgreSQL is running
+   - Check database URL and credentials in `.env`
+   - Ensure database exists
+
+2. **JWT Token Issues**
+   - Ensure JWT_SECRET is at least 256 bits (32 characters)
+   - Check token expiration settings
+
+3. **Email Not Sending**
+   - Verify Gmail App Password is correct
+   - Check SMTP settings
+   - Ensure 2FA is enabled on Gmail
+
+4. **Port Already in Use**
+   - Change SERVER_PORT in `.env`
+   - Kill process using the port: `netstat -ano | findstr :8081`
+
+## 📝 Example API Calls
+
+### Register User
+```bash
+curl -X POST http://localhost:8081/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "firstName": "John",
+    "lastName": "Doe",
+    "email": "john@example.com",
+    "password": "securePassword123"
+  }'
+```
+
+### Login
+```bash
+curl -X POST http://localhost:8081/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "john@example.com",
+    "password": "securePassword123"
+  }'
+```
+
+### Get Users (with JWT)
+```bash
+curl -X GET http://localhost:8081/api/users \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+## 📞 Support
 
 For issues and questions:
-- Check application logs
-- Verify environment variables
-- Ensure database connectivity
-- Validate social provider tokens
+- Create an issue in the repository
+- Check the troubleshooting section
+- Review API documentation
 
+---
 
-cml-insight
-omobio
+**Note**: Make sure to keep your `.env` file secure and never commit it to version control. Use `.env.example` for sharing configuration templates.

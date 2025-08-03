@@ -36,7 +36,7 @@ public class AdminController {
     public ResponseEntity<?> resetPassword(
             @PathVariable Long userId,
             @RequestBody String newPassword) {
-        // Logging of sensitive information has been removed for security reasons.
+
         try {
             userService.resetPassword(userId, newPassword);
             return ResponseEntity.ok("Password reset successfully");

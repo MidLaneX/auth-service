@@ -1,18 +1,14 @@
 package com.midlane.project_management_tool_auth_service.service;
 
-import com.midlane.project_management_tool_auth_service.dto.AuthResponse;
-import com.midlane.project_management_tool_auth_service.dto.LoginRequest;
-import com.midlane.project_management_tool_auth_service.dto.RegisterRequest;
-import com.midlane.project_management_tool_auth_service.dto.UserDTO;
-import com.midlane.project_management_tool_auth_service.dto.EmailVerificationRequest;
-import com.midlane.project_management_tool_auth_service.dto.SocialLoginRequest;
-import com.midlane.project_management_tool_auth_service.dto.SocialUserInfo;
+import com.midlane.project_management_tool_auth_service.dto.*;
 import com.midlane.project_management_tool_auth_service.model.AuthProvider;
+import com.midlane.project_management_tool_auth_service.model.RefreshToken;
 import com.midlane.project_management_tool_auth_service.model.Role;
 import com.midlane.project_management_tool_auth_service.model.User;
 import com.midlane.project_management_tool_auth_service.repository.UserRepository;
 import com.midlane.project_management_tool_auth_service.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -39,8 +35,12 @@ public class UserService {
     private final CustomUserDetailsService userDetailsService;
     private final EmailVerificationService emailVerificationService;
     private final SocialAuthService socialAuthService;
+    private final RefreshTokenService refreshTokenService;
 
-    public AuthResponse registerUser(RegisterRequest request) {
+    @Value("${jwt.access-token.expiration:900000}") // 15 minutes
+    private long accessTokenExpiration;
+
+    public AuthResponse registerUser(RegisterRequest request, String deviceInfo) {
         // Check if email already exists
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new RuntimeException("Email is already in use");
@@ -65,17 +65,69 @@ public class UserService {
             .build();
         emailVerificationService.sendVerificationEmail(verificationRequest);
 
-        // Generate JWT token (user can access limited features until email is verified)
+        // Generate tokens using RSA
         UserDetails userDetails = userDetailsService.loadUserByUsername(savedUser.getEmail());
-        String token = jwtUtil.generateToken(userDetails);
+        String accessToken = jwtUtil.generateAccessToken(userDetails);
+
+        // Create refresh token
+        RefreshToken refreshToken = refreshTokenService.createRefreshToken(userDetails, deviceInfo);
 
         return AuthResponse.builder()
-                .token(token)
-                .userId(savedUser.getUserId())
-                .email(savedUser.getEmail())
-                .role(savedUser.getRole())
-                .emailVerified(savedUser.getEmailVerified())
-                .message("Registration successful! Please check your email to verify your account.")
+                .accessToken(accessToken)
+                .refreshToken(refreshToken.getToken())
+                .tokenType("Bearer")
+                .expiresIn(accessTokenExpiration / 1000) // Convert to seconds
+                .userEmail(savedUser.getEmail())
+                .role(savedUser.getRole().name())
+                .build();
+    }
+
+    public AuthResponse loginUser(LoginRequest request, String deviceInfo) {
+        try {
+            // Use the properly configured AuthenticationManager
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
+            );
+
+            // Find User by email to get userId and role
+            User user = userRepository.findByEmail(request.getEmail())
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            // Generate tokens using RSA
+            UserDetails userDetails = userDetailsService.loadUserByUsername(request.getEmail());
+            String accessToken = jwtUtil.generateAccessToken(userDetails);
+
+            // Create refresh token
+            RefreshToken refreshToken = refreshTokenService.createRefreshToken(userDetails, deviceInfo);
+
+            return AuthResponse.builder()
+                    .accessToken(accessToken)
+                    .refreshToken(refreshToken.getToken())
+                    .tokenType("Bearer")
+                    .expiresIn(accessTokenExpiration / 1000) // Convert to seconds
+                    .userEmail(user.getEmail())
+                    .role(user.getRole().name())
+                    .build();
+
+        } catch (AuthenticationException e) {
+            throw new BadCredentialsException("Invalid email or password");
+        }
+    }
+
+    @Transactional
+    public RefreshTokenResponse refreshAccessToken(RefreshTokenRequest request) {
+        RefreshToken refreshToken = refreshTokenService.findByToken(request.getRefreshToken())
+                .orElseThrow(() -> new RuntimeException("Refresh token not found"));
+
+        refreshToken = refreshTokenService.verifyExpiration(refreshToken);
+
+        UserDetails userDetails = userDetailsService.loadUserByUsername(refreshToken.getUserEmail());
+        String newAccessToken = jwtUtil.generateAccessToken(userDetails);
+
+        return RefreshTokenResponse.builder()
+                .accessToken(newAccessToken)
+                .tokenType("Bearer")
+                .expiresIn(accessTokenExpiration / 1000) // Convert to seconds
                 .build();
     }
 
@@ -94,68 +146,7 @@ public class UserService {
                 .build();
     }
 
-    public AuthResponse loginUser(LoginRequest request) {
-        try {
-            // Use the properly configured AuthenticationManager
-            Authentication authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
-            );
-
-            // Find User by email to get userId and role
-            User user = userRepository.findByEmail(request.getEmail())
-                    .orElseThrow(() -> new RuntimeException("User not found"));
-
-            // Generate JWT token
-            UserDetails userDetails = userDetailsService.loadUserByUsername(request.getEmail());
-            String token = jwtUtil.generateToken(userDetails);
-
-            String message = user.getEmailVerified() ?
-                "Login successful!" :
-                "Login successful! Please verify your email to access all features.";
-
-            return AuthResponse.builder()
-                    .token(token)
-                    .userId(user.getUserId())
-                    .email(user.getEmail())
-                    .role(user.getRole())
-                    .emailVerified(user.getEmailVerified())
-                    .message(message)
-                    .build();
-
-        } catch (AuthenticationException ex) {
-            throw new BadCredentialsException("Invalid email or password");
-        }
-    }
-
-    @Transactional
-    public String resetPassword(Long userId, String newPassword) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        // Encode the new password and update user
-        String encodedPassword = passwordEncoder.encode(newPassword);
-        user.setPasswordHash(encodedPassword);
-        user.setPasswordLastChanged(LocalDateTime.now());
-
-        userRepository.save(user);
-
-        return "Password reset successfully";
-    }
-
-    public void updateUserRole(Long userId, Role role) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        // Update role
-        user.setRole(role);
-        userRepository.save(user);
-    }
-
-    @Transactional
     public AuthResponse authenticateWithSocial(SocialLoginRequest request) {
-        // Log for error tracking
-        System.out.println("Social login request: " + request);
-
         // Get user info from social provider
         SocialUserInfo socialUserInfo = socialAuthService.getUserInfo(request.getProvider(), request.getAccessToken());
 
@@ -189,22 +180,98 @@ public class UserService {
             isNewUser = true;
         }
 
-        // Generate JWT token
+        // Generate RSA-based tokens
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
-        String token = jwtUtil.generateToken(userDetails);
+        String accessToken = jwtUtil.generateAccessToken(userDetails);
 
-        String message = isNewUser ?
-            "Registration successful via " + request.getProvider() + "!" :
-            "Login successful via " + request.getProvider() + "!";
+        // Create refresh token with default device info for social login
+        RefreshToken refreshToken = refreshTokenService.createRefreshToken(userDetails, "Social Login - " + request.getProvider());
 
         return AuthResponse.builder()
-                .token(token)
-                .userId(user.getUserId())
-                .email(user.getEmail())
-                .role(user.getRole())
-                .emailVerified(user.getEmailVerified())
-                .message(message)
+                .accessToken(accessToken)
                 .build();
+    }
+
+    @Transactional
+    public void resetPassword(Long userId, String newPassword) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found with ID: " + userId));
+
+        // Encode the new password
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setPasswordLastChanged(LocalDateTime.now());
+
+        // Save the updated user
+        userRepository.save(user);
+
+        // Revoke all refresh tokens for security after password change
+        refreshTokenService.revokeAllUserTokens(user.getEmail());
+    }
+
+    @Transactional
+    public void changePassword(String userEmail, String currentPassword, String newPassword) {
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Verify current password
+        if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            throw new RuntimeException("Current password is incorrect");
+        }
+
+        // Update password
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setPasswordLastChanged(LocalDateTime.now());
+
+        // Save the updated user
+        userRepository.save(user);
+
+        // Revoke all refresh tokens for security after password change
+        refreshTokenService.revokeAllUserTokens(user.getEmail());
+    }
+
+    @Transactional
+    public void updateUserRole(Long userId, Role newRole) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found with ID: " + userId));
+
+        Role oldRole = user.getRole();
+        user.setRole(newRole);
+
+        // Save the updated user
+        userRepository.save(user);
+
+        // Revoke all refresh tokens when role changes for security
+        // This forces the user to log in again to get tokens with updated role claims
+        refreshTokenService.revokeAllUserTokens(user.getEmail());
+
+        // Log the role change for audit purposes
+        // You can add logging here if needed
+    }
+
+    @Transactional
+    public void updateUserStatus(Long userId, boolean isActive) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found with ID: " + userId));
+
+        // If you have an active/inactive status field, update it here
+        // user.setActive(isActive);
+
+        userRepository.save(user);
+
+        // If deactivating user, revoke all tokens
+        if (!isActive) {
+            refreshTokenService.revokeAllUserTokens(user.getEmail());
+        }
+    }
+
+    public User findById(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found with ID: " + userId));
+    }
+
+    public User findByEmail(String email) {
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found with email: " + email));
     }
 
     private User createUserFromSocialInfo(SocialUserInfo socialUserInfo) {
@@ -215,6 +282,7 @@ public class UserService {
         user.setProfilePictureUrl(socialUserInfo.getProfilePictureUrl());
         user.setProvider(AuthProvider.valueOf(socialUserInfo.getProvider().toUpperCase()));
         user.setProviderId(socialUserInfo.getId());
+        user.setPasswordHash("empty"); // No password for social login
         user.setRole(Role.USER);
         user.setEmailVerified(socialUserInfo.isEmailVerified());
         user.setUserCreated(LocalDateTime.now());

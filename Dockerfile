@@ -37,6 +37,9 @@ WORKDIR /app
 # Copy the JAR file from builder stage
 COPY --from=builder /app/target/project-management-tool-auth-service-0.0.1-SNAPSHOT.jar app.jar
 
+# Create keys directory and set proper permissions
+RUN mkdir -p /app/keys && chown -R spring:spring /app
+
 # Change ownership to spring user
 RUN chown spring:spring app.jar
 
@@ -48,7 +51,7 @@ EXPOSE 8081
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
-  CMD curl -f http://localhost:8080/actuator/health || exit 1
+  CMD curl -f http://localhost:8081/actuator/health || exit 1
 
-# Run the application
-ENTRYPOINT ["java", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]
+# Run the application with proper environment variable handling
+ENTRYPOINT ["java", "-jar", "app.jar"]

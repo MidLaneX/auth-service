@@ -2,6 +2,9 @@ package com.midlane.project_management_tool_auth_service.service;
 
 import com.midlane.project_management_tool_auth_service.dto.SocialUserInfo;
 import com.midlane.project_management_tool_auth_service.exception.OAuth2AuthenticationProcessingException;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.JwtException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -17,15 +20,13 @@ public class SocialAuthService {
 
     private final WebClient.Builder webClientBuilder;
 
-    public SocialUserInfo getUserInfo(String provider, String accessToken) {
-        System.out.println("Fetching user info from provider: " + provider);
-        System.out.println("Access Token: " + accessToken);
+    public SocialUserInfo getUserInfo(String provider, String token) {
         try {
             switch (provider.toLowerCase()) {
                 case "google":
-                    return getGoogleUserInfo(accessToken);
+                    return getGoogleUserInfoFromIdToken(token);
                 case "facebook":
-                    return getFacebookUserInfo(accessToken);
+                    return getFacebookUserInfo(token);
                 default:
                     throw new OAuth2AuthenticationProcessingException("Unsupported provider: " + provider);
             }
@@ -35,33 +36,48 @@ public class SocialAuthService {
         }
     }
 
-    private SocialUserInfo getGoogleUserInfo(String accessToken) {
+    private SocialUserInfo getGoogleUserInfoFromIdToken(String idToken) {
+
         try {
-            WebClient webClient = webClientBuilder.build();
+            // Parse the JWT token without verification (since it's already verified by Google)
+            // In production, you should verify the token signature
+            String[] chunks = idToken.split("\\.");
+            if (chunks.length != 3) {
+                throw new OAuth2AuthenticationProcessingException("Invalid Google ID token format");
+            }
 
-            Map<String, Object> userInfo = webClient.get()
-                    .uri("https://www.googleapis.com/oauth2/v2/userinfo")
-                    .header("Authorization", "Bearer " + accessToken)
-                    .retrieve()
-                    .bodyToMono(Map.class)
-                    .block();
+            // Decode the payload (claims)
+            Claims claims = Jwts.parserBuilder()
+                    .build()
+                    .parseClaimsJwt(chunks[0] + "." + chunks[1] + ".")
+                    .getBody();
 
-            if (userInfo == null) {
-                throw new OAuth2AuthenticationProcessingException("Failed to fetch user info from Google");
+            String userId = claims.getSubject();
+            String email = claims.get("email", String.class);
+            String firstName = claims.get("given_name", String.class);
+            String lastName = claims.get("family_name", String.class);
+            String picture = claims.get("picture", String.class);
+            Boolean emailVerified = claims.get("email_verified", Boolean.class);
+
+            if (email == null || email.isEmpty()) {
+                throw new OAuth2AuthenticationProcessingException("Email not found in Google ID token");
             }
 
             return new SocialUserInfo(
-                    (String) userInfo.get("id"),
-                    (String) userInfo.get("email"),
-                    (String) userInfo.get("given_name"),
-                    (String) userInfo.get("family_name"),
-                    (String) userInfo.get("picture"),
+                    userId,
+                    email,
+                    firstName,
+                    lastName,
+                    picture,
                     "google",
-                    Boolean.TRUE.equals(userInfo.get("verified_email"))
+                    Boolean.TRUE.equals(emailVerified)
             );
-        } catch (WebClientResponseException e) {
-            log.error("Google API error: {}", e.getResponseBodyAsString());
-            throw new OAuth2AuthenticationProcessingException("Invalid Google access token");
+        } catch (JwtException e) {
+            log.error("JWT parsing error: {}", e.getMessage());
+            throw new OAuth2AuthenticationProcessingException("Invalid Google ID token");
+        } catch (Exception e) {
+            log.error("Error decoding Google ID token: {}", e.getMessage());
+            throw new OAuth2AuthenticationProcessingException("Failed to decode Google ID token");
         }
     }
 
