@@ -7,6 +7,7 @@ import com.midlane.project_management_tool_auth_service.service.RefreshTokenServ
 import com.midlane.project_management_tool_auth_service.service.UserService;
 import com.midlane.project_management_tool_auth_service.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -17,6 +18,7 @@ import jakarta.servlet.http.HttpServletRequest;
 @RestController
 @RequestMapping("/api/auth/initial")
 @RequiredArgsConstructor
+@Slf4j
 public class AuthController {
 
     private final UserService userService;
@@ -84,13 +86,29 @@ public class AuthController {
 
     @PostMapping("/social/login")
     public ResponseEntity<?> socialLogin(@Valid @RequestBody SocialLoginRequest request) {
+
+        System.out.println("Social login request: " + request);
         try {
+
+            // Additional validation
+            if (request.getProvider() == null || request.getProvider().trim().isEmpty()) {
+                ErrorResponse error = new ErrorResponse("VALIDATION_ERROR", "Provider is required");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+            }
+
+            if (request.getAccessToken() == null || request.getAccessToken().trim().isEmpty()) {
+                ErrorResponse error = new ErrorResponse("VALIDATION_ERROR", "Access token is required");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+            }
+
             AuthResponse response = userService.authenticateWithSocial(request);
             return ResponseEntity.ok(response);
         } catch (OAuth2AuthenticationProcessingException ex) {
+            log.error("OAuth2 authentication error: {}", ex.getMessage());
             ErrorResponse error = new ErrorResponse("SOCIAL_AUTH_ERROR", ex.getMessage());
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
         } catch (RuntimeException ex) {
+            log.error("Social login error: {}", ex.getMessage(), ex);
             ErrorResponse error = new ErrorResponse("SOCIAL_LOGIN_ERROR", ex.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
         }

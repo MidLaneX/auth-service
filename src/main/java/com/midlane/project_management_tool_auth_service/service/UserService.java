@@ -264,7 +264,7 @@ public class UserService {
                     user.setEmailVerified(true);
                 }
                 userRepository.save(user);
-
+                
                 // Publish user updated event to Kafka (minimal info)
                 userEventService.publishUserEvent(user, "USER_UPDATED");
             }
@@ -272,7 +272,7 @@ public class UserService {
             // Create new user from social login
             user = createUserFromSocialInfo(socialUserInfo);
             isNewUser = true;
-
+            
             // Publish user created event to Kafka (minimal info)
             userEventService.publishUserEvent(user, "USER_CREATED");
         }

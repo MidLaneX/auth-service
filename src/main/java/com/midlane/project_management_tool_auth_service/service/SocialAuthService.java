@@ -34,8 +34,67 @@ public class SocialAuthService {
         }
     }
 
-    private SocialUserInfo getGoogleUserInfo(String accessToken) {
+    private SocialUserInfo getGoogleUserInfo(String token) {
         try {
+            // Check if this is an ID token (JWT format) or access token
+            if (isJwtToken(token)) {
+                return getGoogleUserInfoFromIdToken(token);
+            } else {
+                return getGoogleUserInfoFromAccessToken(token);
+            }
+        } catch (Exception e) {
+            log.error("Error getting Google user info", e);
+            throw new RuntimeException("Failed to get user info from Google: " + e.getMessage());
+        }
+    }
+
+    private boolean isJwtToken(String token) {
+        return token != null && token.split("\\.").length == 3;
+    }
+
+    private SocialUserInfo getGoogleUserInfoFromIdToken(String idToken) {
+        try {
+            log.debug("Processing Google ID token directly");
+
+            // Verify the ID token with Google
+            String verifyUrl = "https://www.googleapis.com/oauth2/v3/tokeninfo?id_token=" + idToken;
+
+            ResponseEntity<Map> response = restTemplate.getForEntity(verifyUrl, Map.class);
+            Map<String, Object> userInfo = response.getBody();
+
+            if (userInfo == null || userInfo.containsKey("error")) {
+                String error = userInfo != null ? (String) userInfo.get("error_description") : "Unknown error";
+                throw new RuntimeException("Invalid Google ID token: " + error);
+            }
+
+            // Verify the audience (client ID)
+            String audience = (String) userInfo.get("aud");
+            if (!googleClientId.equals(audience)) {
+                throw new RuntimeException("ID token audience does not match client ID");
+            }
+
+            log.debug("Successfully verified Google ID token for email: {}", userInfo.get("email"));
+
+            return new SocialUserInfo(
+                (String) userInfo.get("sub"), // Google's user ID
+                (String) userInfo.get("email"),
+                (String) userInfo.get("given_name"),
+                (String) userInfo.get("family_name"),
+                (String) userInfo.get("picture"),
+                "google",
+                Boolean.TRUE.equals(userInfo.get("email_verified"))
+            );
+
+        } catch (Exception e) {
+            log.error("Error processing Google ID token", e);
+            throw new RuntimeException("Failed to process Google ID token: " + e.getMessage());
+        }
+    }
+
+    private SocialUserInfo getGoogleUserInfoFromAccessToken(String accessToken) {
+        try {
+            log.debug("Processing Google access token");
+
             HttpHeaders headers = new HttpHeaders();
             headers.setBearerAuth(accessToken);
             HttpEntity<?> entity = new HttpEntity<>(headers);
@@ -52,6 +111,8 @@ public class SocialAuthService {
                 throw new RuntimeException("Failed to get user info from Google");
             }
 
+            log.debug("Successfully retrieved Google user info for email: {}", userInfo.get("email"));
+
             return new SocialUserInfo(
                 (String) userInfo.get("id"),
                 (String) userInfo.get("email"),
@@ -62,8 +123,8 @@ public class SocialAuthService {
                 Boolean.TRUE.equals(userInfo.get("verified_email"))
             );
         } catch (Exception e) {
-            log.error("Error getting Google user info", e);
-            throw new RuntimeException("Failed to get user info from Google: " + e.getMessage());
+            log.error("Error getting Google user info from access token", e);
+            throw new RuntimeException("Failed to get user info from Google access token: " + e.getMessage());
         }
     }
 

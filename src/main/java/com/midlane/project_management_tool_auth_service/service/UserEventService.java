@@ -29,8 +29,8 @@ public class UserEventService {
 
             String message = objectMapper.writeValueAsString(userEvent);
             kafkaProducerService.sendMessageWithKey(
-                userAddedTopic,
-                user.getUserId().toString(),
+                userAddedTopic, 
+                user.getUserId().toString(), 
                 message
             );
 
