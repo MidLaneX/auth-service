@@ -74,25 +74,4 @@ public class EmailVerificationController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
         }
     }
-
-    /**
-     * Cancel/invalidate verification token
-     * DELETE /api/auth/cancel-verification/{email}
-     */
-//    @DeleteMapping("/cancel-verification/{email}")
-//    public ResponseEntity<?> cancelVerification(@PathVariable String email) {
-//        try {
-//            emailVerificationService.cancelVerification(email);
-//            EmailVerificationResponse response = EmailVerificationResponse.builder()
-//                    .success(true)
-//                    .message("Verification cancelled successfully")
-//                    .build();
-//            log.info("Verification cancelled for email: {}", email);
-//            return ResponseEntity.ok(response);
-//        } catch (RuntimeException ex) {
-//            log.error("Failed to cancel verification for: {}. Error: {}", email, ex.getMessage());
-//            ErrorResponse error = new ErrorResponse("CANCEL_FAILED", ex.getMessage());
-//            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
-//        }
-//    }
 }

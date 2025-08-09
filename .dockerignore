@@ -1,0 +1,29 @@
+# Maven build files
+target/
+!target/project-management-tool-auth-service-*.jar
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+HELP.md
+
+# Logs
+*.log
+
+# Environment files (these should be mounted as volumes or passed as env vars)
+.env
+
+# Test files
+src/test/

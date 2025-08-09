@@ -22,11 +22,16 @@ public class CustomUserDetailsService implements UserDetailsService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
 
-// Removed debug statements that log sensitive information.
+        // Handle null password for social login users
+        String password = user.getPasswordHash();
+        if (password == null) {
+            // For social login users, set a placeholder password since they don't authenticate with passwords
+            password = "{noop}"; // No-op password encoder prefix for empty password
+        }
 
         return org.springframework.security.core.userdetails.User.builder()
                 .username(user.getEmail())
-                .password(user.getPasswordHash())
+                .password(password)
                 .authorities("ROLE_" + user.getRole().name())
                 .build();
     }

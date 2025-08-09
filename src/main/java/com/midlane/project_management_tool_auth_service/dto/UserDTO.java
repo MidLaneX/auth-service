@@ -16,6 +16,8 @@ public class UserDTO {
     private Long userId;
     private String email;
     private String phone;
-    private Enum<Role> role;
-    private LocalDateTime userCreated;
+    private Role role;
+    private Boolean emailVerified;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 }

@@ -1,275 +1,128 @@
-# Project Management Tool - Authentication Service
+# Authentication Service
 
-## 🎯 Overview
+A microservice for user authentication and authorization in the Project Management Tool ecosystem.
 
-A robust Spring Boot authentication service for the Project Management Tool that provides secure user registration, login, email verification, JWT token management, and role-based access control (RBAC).
+## 🏗️ System Design
 
-## 🚀 Features
+### Core Responsibilities
+- User registration and authentication (email/password + social login)
+- JWT token generation and validation with RSA keys
+- Email verification workflow
+- Role-based access control (USER, ADMIN)
+- User event publishing via Kafka
 
-- **User Registration & Login** - Secure user authentication with email verification
-- **JWT Token Management** - Stateless authentication using JSON Web Tokens
-- **Email Verification** - Email-based account verification with HTML templates
-- **Role-Based Access Control (RBAC)** - Admin and User role management
-- **Password Security** - BCrypt password hashing
-- **Email Services** - Welcome emails, password reset, and verification emails
-- **RESTful API** - Clean REST endpoints for all authentication operations
-- **Environment Configuration** - Secure configuration management with .env files
-
-## 📋 Prerequisites
-
-Before running this service, ensure you have:
-
-- **Java 17+** installed
-- **Maven 3.6+** installed
-- **PostgreSQL 12+** running on port 5434
-- **Gmail App Password** for email services (optional but recommended)
-
-## 🛠️ Technology Stack
-
-- **Spring Boot 3.x** - Main framework
-- **Spring Security 6.x** - Authentication and authorization
-- **Spring Data JPA** - Database operations
-- **PostgreSQL** - Primary database
-- **JWT (JSON Web Tokens)** - Stateless authentication
-- **JavaMailSender** - Email services
-- **Lombok** - Reduce boilerplate code
-- **BCrypt** - Password hashing
-
-## 📁 Project Structure
-
-```
-src/main/java/com/midlane/project_management_tool_auth_service/
-├── config/           # Configuration classes
-├── controller/       # REST API controllers
-├── dto/             # Data Transfer Objects
-├── exception/       # Custom exceptions
-├── model/           # JPA entities
-├── repository/      # Data access layer
-├── security/        # Security configuration & JWT
-├── service/         # Business logic
-└── util/           # Utility classes
-```
-
-## ⚙️ Configuration
-
-### 1. Environment Setup
-
-Copy the `.env.example` to `.env` and configure:
-
-```env
-# Database Configuration
-DB_URL=jdbc:postgresql://localhost:5434/auth_service_db
-DB_USERNAME=postgres
-DB_PASSWORD=postgres
-
-# Server Configuration
-SERVER_PORT=8081
-
-# JWT Configuration
-JWT_SECRET=dGhpcyBpcyBhIDI1NiBiaXQgc2VjdXJlIGtleSBmb3IgSldUIGF1dGhlbnRpY2F0aW9uIQ==
-JWT_EXPIRATION=86400000
-
-# Email Configuration
-MAIL_USERNAME=your-email@gmail.com
-MAIL_PASSWORD=your-app-password
-MAIL_FROM=noreply@projectmanagement.com
-FRONTEND_URL=http://localhost:5173
-```
-
-### 2. Gmail Configuration (Email Services)
-
-To enable email services:
-
-1. Go to [Google Account Settings](https://myaccount.google.com)
-2. Enable **2-Factor Authentication**
-3. Navigate to **Security > 2-Step Verification > App passwords**
-4. Generate a new app password for "Mail"
-5. Use the 16-digit code in `MAIL_PASSWORD`
-6. Replace `MAIL_USERNAME` with your Gmail address
-
-### 3. Database Setup
-
-Create PostgreSQL database:
-
-```sql
-CREATE DATABASE auth_service_db;
-```
-
-The application will automatically create tables on startup.
-
-## 🚀 Running the Application
-
-### Method 1: Using Maven
-
-```bash
-# Install dependencies
-mvn clean install
-
-# Run the application
-mvn spring-boot:run
-```
-
-### Method 2: Using JAR
-
-```bash
-# Build JAR
-mvn clean package
-
-# Run JAR
-java -jar target/project-management-tool-auth-service-0.0.1-SNAPSHOT.jar
-```
-
-The service will start on `http://localhost:8082`
+### Architecture
+- **Framework**: Spring Boot 3.x with Java 21
+- **Database**: PostgreSQL for user data persistence
+- **Security**: RSA-based JWT tokens with refresh token mechanism
+- **Messaging**: Kafka for user event publishing
+- **External APIs**: Google OAuth2 for social authentication
 
 ## 📡 API Endpoints
 
-### Authentication Endpoints
-
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| POST | `/api/auth/register` | User registration | No |
-| POST | `/api/auth/login` | User login | No |
-| GET | `/api/auth/verify-email` | Email verification | No |
-| POST | `/api/auth/resend-verification` | Resend verification email | No |
-
-### User Management Endpoints
-
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| GET | `/api/users/profile` | Get user profile | Yes |
-| GET | `/api/users/all` | Get all users (non-sensitive data) | Yes (USER) |
-
-### Admin Endpoints
-
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| GET | `/api/admin/users` | Get all users with full details | Yes (ADMIN) |
-| DELETE | `/api/admin/users/{id}` | Delete user | Yes (ADMIN) |
-| PUT | `/api/admin/users/{id}/role` | Update user role | Yes (ADMIN) |
-
-## 📝 API Usage Examples
-
-### 1. User Registration
-
-```bash
-curl -X POST http://localhost:8082/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "password": "securePassword123",
-    "phone": "+1234567890"
-  }'
+### Authentication APIs
+```
+POST /api/auth/initial/register       # Register with email/password
+POST /api/auth/initial/login          # Login with email/password  
+POST /api/auth/initial/social/login   # Social login (Google/Facebook)
+POST /api/auth/initial/refresh        # Refresh access token
+POST /api/auth/initial/logout         # Logout (revoke refresh token)
+POST /api/auth/initial/logout-all     # Logout from all devices
+GET  /api/auth/initial/public-key     # Get RSA public key for JWT verification
 ```
 
-**Response:**
+### User Management APIs
+```
+GET  /api/users                      # Get all users (Admin only)
+GET  /api/users/profile              # Get current user profile
+PUT  /api/users/profile              # Update user profile
+PUT  /api/users/{id}/role            # Update user role (Admin only)
+DELETE /api/users/{id}               # Delete user (Admin only)
+```
+
+### Email Verification APIs
+```
+POST /api/email/send-verification    # Send verification email
+GET  /api/email/verify               # Verify email with token
+POST /api/email/resend-verification  # Resend verification email
+```
+
+## 📨 Kafka Events
+
+The service publishes minimal user events to inform other microservices:
+
+### Topic: `user.added`
+
+**Event Structure:**
 ```json
 {
-  "message": "Registration successful. Please check your email for verification.",
-  "success": true
-}
-```
-
-### 2. User Login
-
-```bash
-curl -X POST http://localhost:8082/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "password": "securePassword123"
-  }'
-```
-
-**Response:**
-```json
-{
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "userId": 123,
   "email": "user@example.com",
-  "role": "USER",
-  "expiresIn": 86400000
+  "eventType": "USER_CREATED" | "USER_UPDATED" | "USER_DELETED"
 }
 ```
 
-### 3. Get All Users (Non-Sensitive)
+**Event Triggers:**
+- `USER_CREATED`: New user registration (email/password or social login)
+- `USER_UPDATED`: User profile updates, password changes, role changes
+- `USER_DELETED`: User account deletion
 
-```bash
-curl -X GET http://localhost:8082/api/users/all \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+**Key Design Decision**: Only essential data (userId, email) is published via Kafka. Full user details (name, profile picture, etc.) remain in the auth service database for privacy and data minimization.
+
+## 🔐 Security Model
+
+### JWT Token Strategy
+- **Access Tokens**: Short-lived (15 minutes), RSA-signed JWT tokens
+- **Refresh Tokens**: Long-lived (7 days), stored securely with device tracking
+- **RSA Keys**: Public/private key pair for token signing and verification
+
+### User Data Model
+```java
+// Essential fields for all authentication types
+userId: Long              // Primary identifier
+email: String            // Unique, required
+phone: String            // Optional
+passwordHash: String     // BCrypt hashed (null for social login)
+role: Role              // USER or ADMIN
+emailVerified: Boolean   // Email verification status
+createdAt: LocalDateTime
+updatedAt: LocalDateTime
+
+// Social login fields (when applicable)
+provider: AuthProvider   // LOCAL, GOOGLE, FACEBOOK
+providerId: String       // Provider's user ID
+firstName: String        // From social provider
+lastName: String         // From social provider
+profilePictureUrl: String // From social provider
 ```
 
-**Response:**
-```json
-[
-  {
-    "userId": 1,
-    "email": "user@example.com",
-    "phone": "+1234567890",
-    "role": "USER",
-    "userCreated": "2025-01-15T10:30:00"
-  }
-]
-```
+### Authentication Flow
+1. **Registration**: Email verification required for local accounts
+2. **Login**: Returns access + refresh tokens
+3. **Token Refresh**: Exchange refresh token for new access token
+4. **Social Login**: Auto-registration if email doesn't exist
 
-## 🔐 Security Features
+## 🔗 Integration Points
 
-### JWT Token Authentication
-- **256-bit secure key** for token signing
-- **24-hour expiration** (configurable)
-- **Stateless authentication** - no server-side sessions
+### With API Gateway
+- Exposes RSA public key at `/api/auth/initial/public-key`
+- Gateway validates JWT tokens using this public key
+- No direct database access needed by gateway
 
-### Password Security
-- **BCrypt hashing** with secure rounds
-- **Minimum password requirements** (can be configured)
+### With Other Microservices
+- Publishes user events via Kafka
+- Other services can subscribe to `user.added` topic
+- Services receive minimal user data (userId + email only)
 
-### Role-Based Access Control (RBAC)
-- **USER Role**: Basic user operations
-- **ADMIN Role**: Full administrative access
-- **Endpoint-level security** with method annotations
+### External Dependencies
+- **PostgreSQL**: User data persistence
+- **Kafka**: Event publishing
+- **Gmail SMTP**: Email verification
+- **Google OAuth2**: Social authentication
+- **Facebook Graph API**: Social authentication (optional)
 
-### Email Verification
-- **Secure token generation** for email verification
-- **24-hour expiration** for verification links
-- **HTML email templates** with professional styling
-
-#### 2. Email Authentication Failed
-- Ensure 2FA is enabled on your Google account
-- Use App Password, not your regular Gmail password
-- Check that `MAIL_USERNAME` and `MAIL_PASSWORD` are correctly set in `.env`
-
-#### 3. JWT Token Issues
-- Ensure `JWT_SECRET` is at least 256-bit (32+ characters)
-- Check token expiration time
-- Verify Bearer token format in requests
-
-#### 4. Database Connection Issues
-- Ensure PostgreSQL is running on port 5434
-- Check database credentials in `.env`
-- Verify database `auth_service_db` exists
-
-### Logs
-
-Application logs provide detailed information:
-- **INFO level**: Normal operations
-- **ERROR level**: Exceptions and failures
-- **DEBUG level**: Detailed debugging (development only)
-
-## 🧪 Testing
-
-### Manual Testing with Postman
-
-1. Import the API endpoints into Postman
-2. Register a new user
-3. Check email for verification link
-4. Login with verified credentials
-5. Test protected endpoints with JWT token
-
-### Health Check
-
-```bash
-curl http://localhost:8081/actuator/health
-```
-
-
-
-**Last Updated**: July 2025
-**Version**: 0.0.1-SNAPSHOT
+## 📊 Port & Service Discovery
+- **Service Port**: 8081
+- **Health Check**: `/actuator/health`
+- **API Documentation**: `/swagger-ui.html`
+- **Metrics**: `/actuator/metrics`
