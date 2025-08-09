@@ -31,18 +31,22 @@ public class User {
     @Column(name = "role", nullable = false)
     private Role role = Role.USER; // Default to USER
 
+    @Column(name = "email_verified", nullable = false)
+    private Boolean emailVerified = false; // Default to false
+
     @Column(name = "password_last_changed")
     private LocalDateTime passwordLastChanged;
-
-    @CreationTimestamp
-    @Column(name = "user_created", nullable = false, updatable = false)
-    private LocalDateTime userCreated;
 
     @Column(name = "email_last_changed")
     private LocalDateTime emailLastChanged;
 
-    @Column(name = "email_verified", nullable = false)
-    private Boolean emailVerified = false; // Default to false
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt;
 
     // Social login fields
     @Column(name = "provider")

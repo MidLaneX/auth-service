@@ -34,8 +34,9 @@ public class UserService {
     private final AuthenticationManager authenticationManager;
     private final CustomUserDetailsService userDetailsService;
     private final EmailVerificationService emailVerificationService;
-    private final SocialAuthService socialAuthService;
     private final RefreshTokenService refreshTokenService;
+    private final UserEventService userEventService;
+    private final SocialAuthService socialAuthService;
 
     @Value("${jwt.access-token.expiration:900000}") // 15 minutes
     private long accessTokenExpiration;
@@ -46,7 +47,7 @@ public class UserService {
             throw new RuntimeException("Email is already in use");
         }
 
-        // Create new user with email verification disabled by default
+        // Create new user
         User user = new User();
         user.setEmail(request.getEmail());
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
@@ -54,10 +55,12 @@ public class UserService {
         user.setRole(Role.USER); // Default to USER role
         user.setEmailVerified(false); // Email not verified initially
         user.setPasswordLastChanged(LocalDateTime.now());
-        user.setUserCreated(LocalDateTime.now());
         user.setEmailLastChanged(LocalDateTime.now());
 
         User savedUser = userRepository.save(user);
+
+        // Publish user registration event to Kafka
+        userEventService.publishUserEvent(savedUser, "USER_CREATED");
 
         // Send verification email asynchronously
         EmailVerificationRequest verificationRequest = EmailVerificationRequest.builder()
@@ -142,8 +145,96 @@ public class UserService {
                 .userId(user.getUserId())
                 .email(user.getEmail())
                 .phone(user.getPhone())
-                .userCreated(user.getUserCreated())
+                .role(user.getRole())
+                .emailVerified(user.getEmailVerified())
+                .createdAt(user.getCreatedAt())
                 .build();
+    }
+
+    @Transactional
+    public void resetPassword(Long userId, String newPassword) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found with ID: " + userId));
+
+        // Encode the new password
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setPasswordLastChanged(LocalDateTime.now());
+
+        // Save the updated user
+        userRepository.save(user);
+
+        // Publish user updated event to Kafka
+        userEventService.publishUserEvent(user, "USER_UPDATED");
+
+        // Revoke all refresh tokens for security after password change
+        refreshTokenService.revokeAllUserTokens(user.getEmail());
+    }
+
+    @Transactional
+    public void changePassword(String userEmail, String currentPassword, String newPassword) {
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Verify current password
+        if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            throw new RuntimeException("Current password is incorrect");
+        }
+
+        // Update password
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setPasswordLastChanged(LocalDateTime.now());
+
+        // Save the updated user
+        userRepository.save(user);
+
+        // Publish user updated event to Kafka
+        userEventService.publishUserEvent(user, "USER_UPDATED");
+
+        // Revoke all refresh tokens for security after password change
+        refreshTokenService.revokeAllUserTokens(user.getEmail());
+    }
+
+    @Transactional
+    public void updateUserRole(Long userId, Role newRole) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found with ID: " + userId));
+
+        user.setRole(newRole);
+
+        // Save the updated user
+        userRepository.save(user);
+
+        // Publish user updated event to Kafka
+        userEventService.publishUserEvent(user, "USER_UPDATED");
+
+        // Revoke all refresh tokens when role changes for security
+        // This forces the user to log in again to get tokens with updated role claims
+        refreshTokenService.revokeAllUserTokens(user.getEmail());
+    }
+
+    @Transactional
+    public void deleteUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found with ID: " + userId));
+
+        // Publish user deleted event to Kafka before deletion
+        userEventService.publishUserEvent(user, "USER_DELETED");
+
+        // Revoke all refresh tokens
+        refreshTokenService.revokeAllUserTokens(user.getEmail());
+
+        // Delete user
+        userRepository.delete(user);
+    }
+
+    public User findById(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found with ID: " + userId));
+    }
+
+    public User findByEmail(String email) {
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found with email: " + email));
     }
 
     public AuthResponse authenticateWithSocial(SocialLoginRequest request) {
@@ -173,11 +264,17 @@ public class UserService {
                     user.setEmailVerified(true);
                 }
                 userRepository.save(user);
+
+                // Publish user updated event to Kafka (minimal info)
+                userEventService.publishUserEvent(user, "USER_UPDATED");
             }
         } else {
             // Create new user from social login
             user = createUserFromSocialInfo(socialUserInfo);
             isNewUser = true;
+
+            // Publish user created event to Kafka (minimal info)
+            userEventService.publishUserEvent(user, "USER_CREATED");
         }
 
         // Generate RSA-based tokens
@@ -189,89 +286,12 @@ public class UserService {
 
         return AuthResponse.builder()
                 .accessToken(accessToken)
+                .refreshToken(refreshToken.getToken())
+                .tokenType("Bearer")
+                .expiresIn(accessTokenExpiration / 1000) // Convert to seconds
+                .userEmail(user.getEmail())
+                .role(user.getRole().name())
                 .build();
-    }
-
-    @Transactional
-    public void resetPassword(Long userId, String newPassword) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found with ID: " + userId));
-
-        // Encode the new password
-        user.setPasswordHash(passwordEncoder.encode(newPassword));
-        user.setPasswordLastChanged(LocalDateTime.now());
-
-        // Save the updated user
-        userRepository.save(user);
-
-        // Revoke all refresh tokens for security after password change
-        refreshTokenService.revokeAllUserTokens(user.getEmail());
-    }
-
-    @Transactional
-    public void changePassword(String userEmail, String currentPassword, String newPassword) {
-        User user = userRepository.findByEmail(userEmail)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        // Verify current password
-        if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
-            throw new RuntimeException("Current password is incorrect");
-        }
-
-        // Update password
-        user.setPasswordHash(passwordEncoder.encode(newPassword));
-        user.setPasswordLastChanged(LocalDateTime.now());
-
-        // Save the updated user
-        userRepository.save(user);
-
-        // Revoke all refresh tokens for security after password change
-        refreshTokenService.revokeAllUserTokens(user.getEmail());
-    }
-
-    @Transactional
-    public void updateUserRole(Long userId, Role newRole) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found with ID: " + userId));
-
-        Role oldRole = user.getRole();
-        user.setRole(newRole);
-
-        // Save the updated user
-        userRepository.save(user);
-
-        // Revoke all refresh tokens when role changes for security
-        // This forces the user to log in again to get tokens with updated role claims
-        refreshTokenService.revokeAllUserTokens(user.getEmail());
-
-        // Log the role change for audit purposes
-        // You can add logging here if needed
-    }
-
-    @Transactional
-    public void updateUserStatus(Long userId, boolean isActive) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found with ID: " + userId));
-
-        // If you have an active/inactive status field, update it here
-        // user.setActive(isActive);
-
-        userRepository.save(user);
-
-        // If deactivating user, revoke all tokens
-        if (!isActive) {
-            refreshTokenService.revokeAllUserTokens(user.getEmail());
-        }
-    }
-
-    public User findById(Long userId) {
-        return userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found with ID: " + userId));
-    }
-
-    public User findByEmail(String email) {
-        return userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found with email: " + email));
     }
 
     private User createUserFromSocialInfo(SocialUserInfo socialUserInfo) {
@@ -282,10 +302,10 @@ public class UserService {
         user.setProfilePictureUrl(socialUserInfo.getProfilePictureUrl());
         user.setProvider(AuthProvider.valueOf(socialUserInfo.getProvider().toUpperCase()));
         user.setProviderId(socialUserInfo.getId());
-        user.setPasswordHash("empty"); // No password for social login
+        user.setPasswordHash(null); // No password for social login
         user.setRole(Role.USER);
         user.setEmailVerified(socialUserInfo.isEmailVerified());
-        user.setUserCreated(LocalDateTime.now());
+        user.setEmailLastChanged(LocalDateTime.now());
 
         return userRepository.save(user);
     }

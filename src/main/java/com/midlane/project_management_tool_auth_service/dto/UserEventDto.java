@@ -7,7 +7,8 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class SocialLoginRequest {
-    private String provider; // "google", "facebook", etc.
-    private String accessToken; // Token from the social provider
+public class UserEventDto {
+    private Long userId;
+    private String email;
+    private String eventType; // e.g., "USER_CREATED", "USER_UPDATED", "USER_DELETED"
 }

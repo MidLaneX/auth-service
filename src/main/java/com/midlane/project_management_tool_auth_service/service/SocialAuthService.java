@@ -1,15 +1,15 @@
 package com.midlane.project_management_tool_auth_service.service;
 
 import com.midlane.project_management_tool_auth_service.dto.SocialUserInfo;
-import com.midlane.project_management_tool_auth_service.exception.OAuth2AuthenticationProcessingException;
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.JwtException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.Map;
 
@@ -18,105 +18,82 @@ import java.util.Map;
 @Slf4j
 public class SocialAuthService {
 
-    private final WebClient.Builder webClientBuilder;
+    private final RestTemplate restTemplate;
 
-    public SocialUserInfo getUserInfo(String provider, String token) {
-        try {
-            switch (provider.toLowerCase()) {
-                case "google":
-                    return getGoogleUserInfoFromIdToken(token);
-                case "facebook":
-                    return getFacebookUserInfo(token);
-                default:
-                    throw new OAuth2AuthenticationProcessingException("Unsupported provider: " + provider);
-            }
-        } catch (Exception e) {
-            log.error("Error fetching user info from {}: {}", provider, e.getMessage());
-            throw new OAuth2AuthenticationProcessingException("Failed to fetch user info from " + provider);
+    @Value("${app.oauth.google.client-id}")
+    private String googleClientId;
+
+    public SocialUserInfo getUserInfo(String provider, String accessToken) {
+        switch (provider.toLowerCase()) {
+            case "google":
+                return getGoogleUserInfo(accessToken);
+            case "facebook":
+                return getFacebookUserInfo(accessToken);
+            default:
+                throw new RuntimeException("Unsupported social provider: " + provider);
         }
     }
 
-    private SocialUserInfo getGoogleUserInfoFromIdToken(String idToken) {
-
+    private SocialUserInfo getGoogleUserInfo(String accessToken) {
         try {
-            // Parse the JWT token without verification (since it's already verified by Google)
-            // In production, you should verify the token signature
-            String[] chunks = idToken.split("\\.");
-            if (chunks.length != 3) {
-                throw new OAuth2AuthenticationProcessingException("Invalid Google ID token format");
-            }
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(accessToken);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
 
-            // Decode the payload (claims)
-            Claims claims = Jwts.parserBuilder()
-                    .build()
-                    .parseClaimsJwt(chunks[0] + "." + chunks[1] + ".")
-                    .getBody();
+            ResponseEntity<Map> response = restTemplate.exchange(
+                "https://www.googleapis.com/oauth2/v2/userinfo",
+                HttpMethod.GET,
+                entity,
+                Map.class
+            );
 
-            String userId = claims.getSubject();
-            String email = claims.get("email", String.class);
-            String firstName = claims.get("given_name", String.class);
-            String lastName = claims.get("family_name", String.class);
-            String picture = claims.get("picture", String.class);
-            Boolean emailVerified = claims.get("email_verified", Boolean.class);
-
-            if (email == null || email.isEmpty()) {
-                throw new OAuth2AuthenticationProcessingException("Email not found in Google ID token");
+            Map<String, Object> userInfo = response.getBody();
+            if (userInfo == null) {
+                throw new RuntimeException("Failed to get user info from Google");
             }
 
             return new SocialUserInfo(
-                    userId,
-                    email,
-                    firstName,
-                    lastName,
-                    picture,
-                    "google",
-                    Boolean.TRUE.equals(emailVerified)
+                (String) userInfo.get("id"),
+                (String) userInfo.get("email"),
+                (String) userInfo.get("given_name"),
+                (String) userInfo.get("family_name"),
+                (String) userInfo.get("picture"),
+                "google",
+                Boolean.TRUE.equals(userInfo.get("verified_email"))
             );
-        } catch (JwtException e) {
-            log.error("JWT parsing error: {}", e.getMessage());
-            throw new OAuth2AuthenticationProcessingException("Invalid Google ID token");
         } catch (Exception e) {
-            log.error("Error decoding Google ID token: {}", e.getMessage());
-            throw new OAuth2AuthenticationProcessingException("Failed to decode Google ID token");
+            log.error("Error getting Google user info", e);
+            throw new RuntimeException("Failed to get user info from Google: " + e.getMessage());
         }
     }
 
     private SocialUserInfo getFacebookUserInfo(String accessToken) {
         try {
-            WebClient webClient = webClientBuilder.build();
+            String url = "https://graph.facebook.com/me?fields=id,email,first_name,last_name,picture&access_token=" + accessToken;
 
-            Map<String, Object> userInfo = webClient.get()
-                    .uri("https://graph.facebook.com/me?fields=id,email,first_name,last_name,picture.type(large)")
-                    .header("Authorization", "Bearer " + accessToken)
-                    .retrieve()
-                    .bodyToMono(Map.class)
-                    .block();
+            ResponseEntity<Map> response = restTemplate.getForEntity(url, Map.class);
 
+            Map<String, Object> userInfo = response.getBody();
             if (userInfo == null) {
-                throw new OAuth2AuthenticationProcessingException("Failed to fetch user info from Facebook");
+                throw new RuntimeException("Failed to get user info from Facebook");
             }
 
-            String profilePictureUrl = null;
-            if (userInfo.get("picture") instanceof Map) {
-                Map<String, Object> picture = (Map<String, Object>) userInfo.get("picture");
-                if (picture.get("data") instanceof Map) {
-                    Map<String, Object> data = (Map<String, Object>) picture.get("data");
-                    profilePictureUrl = (String) data.get("url");
-                }
-            }
+            Map<String, Object> picture = (Map<String, Object>) userInfo.get("picture");
+            Map<String, Object> pictureData = picture != null ? (Map<String, Object>) picture.get("data") : null;
+            String pictureUrl = pictureData != null ? (String) pictureData.get("url") : null;
 
             return new SocialUserInfo(
-                    (String) userInfo.get("id"),
-                    (String) userInfo.get("email"),
-                    (String) userInfo.get("first_name"),
-                    (String) userInfo.get("last_name"),
-                    profilePictureUrl,
-                    "facebook",
-                    userInfo.get("email") != null // Facebook email is verified if present
+                (String) userInfo.get("id"),
+                (String) userInfo.get("email"),
+                (String) userInfo.get("first_name"),
+                (String) userInfo.get("last_name"),
+                pictureUrl,
+                "facebook",
+                userInfo.get("email") != null // Facebook email is considered verified if provided
             );
-        } catch (WebClientResponseException e) {
-            log.error("Facebook API error: {}", e.getResponseBodyAsString());
-            throw new OAuth2AuthenticationProcessingException("Invalid Facebook access token");
+        } catch (Exception e) {
+            log.error("Error getting Facebook user info", e);
+            throw new RuntimeException("Failed to get user info from Facebook: " + e.getMessage());
         }
     }
 }
