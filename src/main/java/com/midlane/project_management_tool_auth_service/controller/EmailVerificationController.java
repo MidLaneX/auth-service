@@ -36,10 +36,6 @@ public class EmailVerificationController {
         }
     }
 
-    /**
-     * Resend verification email
-     * POST /api/auth/resend-verification
-     */
     @PostMapping("/resend-verification")
     public ResponseEntity<?> resendVerificationEmail(@RequestBody EmailVerificationRequest request) {
         try {
@@ -54,10 +50,6 @@ public class EmailVerificationController {
         }
     }
 
-    /**
-     * Check verification status
-     * GET /api/auth/verification-status/{email}
-     */
     @GetMapping("/verification-status/{email}")
     public ResponseEntity<?> checkVerificationStatus(@PathVariable String email) {
         try {

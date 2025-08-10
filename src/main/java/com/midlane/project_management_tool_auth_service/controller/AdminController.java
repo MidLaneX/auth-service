@@ -19,12 +19,6 @@ public class AdminController {
 
     private final UserService userService;
 
-    @GetMapping("/test")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<String> testAdminEndpoint() {
-        return ResponseEntity.ok("Admin endpoint accessed successfully");
-    }
-
     @GetMapping("/all-users")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<UserDTO>> getAllUsers() {
