@@ -20,12 +20,6 @@ public class UserController {
 
     private final UserService userService;
 
-    @GetMapping("/test")
-    @PreAuthorize("hasRole('USER')")
-    public ResponseEntity<String> testEndpoint() {
-        return ResponseEntity.ok("Test endpoint accessed successfully");
-    }
-
     @PutMapping("/reset-password/{userId}")
     @PreAuthorize("hasRole('USER')")
     public ResponseEntity<?> resetPassword(

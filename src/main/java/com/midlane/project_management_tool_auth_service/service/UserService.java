@@ -38,7 +38,7 @@ public class UserService {
     private final UserEventService userEventService;
     private final SocialAuthService socialAuthService;
 
-    @Value("${jwt.access-token.expiration:900000}") // 15 minutes
+    @Value("${jwt.access-token.expiration}") // 15 minutes
     private long accessTokenExpiration;
 
     public AuthResponse registerUser(RegisterRequest request, String deviceInfo) {
